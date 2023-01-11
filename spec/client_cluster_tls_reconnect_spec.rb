@@ -40,7 +40,8 @@ describe 'Client - Cluster TLS reconnect' do
 
     nodes = []
     configs = [s1_config_opts, s2_config_opts, s3_config_opts]
-    configs.each do |config_opts|
+    labels = ['A', 'B', 'C']
+    configs.each_with_index do |config_opts, index|
       nodes << NatsServerControl.init_with_config_from_string(%Q(
         host: '#{config_opts['host']}'
         port:  #{config_opts['port']}
@@ -52,6 +53,8 @@ describe 'Client - Cluster TLS reconnect' do
           ca_file:   "./spec/configs/certs/nats-service.localhost/ca.pem"
           timeout:   10
         }
+
+        client_advertise: "server-#{labels[index]}.clients.nats-service.localhost"
 
         cluster {
           name: "TEST"
@@ -85,8 +88,6 @@ describe 'Client - Cluster TLS reconnect' do
     end
 
     it 'should reconnect to nodes discovered from seed server' do
-      skip 'flapping test'
-
       # Nodes join to cluster before we try to connect
       [@s2, @s3].each do |s|
         s.start_server(true)
@@ -137,16 +138,21 @@ describe 'Client - Cluster TLS reconnect' do
         nats.flush
         nats.request("hello", 'world')
 
-        @s1.kill_server
-        sleep 0.1
+        Thread.new do
+          sleep 1
+          @s1.kill_server
+        end
         mon.synchronize do
           reconnected.wait(3)
         end
 
-        # Reconnected...
+        # Reconnected... still using the original hostname internally.
         expect(nats.instance_variable_get("@hostname")).to eql("server-A.clients.nats-service.localhost")
         expect(nats.connected_server.to_s).to_not eql("")
-        expect(["tls://127.0.0.1:4233", "tls://127.0.0.1:4234"].include?(nats.connected_server.to_s)).to eql(true)
+        expect([
+                "tls://server-B.clients.nats-service.localhost:4233",
+                "tls://server-C.clients.nats-service.localhost:4234"
+               ].include?(nats.connected_server.to_s)).to eql(true)
 
         nats.request("hello", 'world', timeout: 1)
 

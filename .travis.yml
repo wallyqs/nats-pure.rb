@@ -25,3 +25,11 @@ addons:
     - server-A.clients.fake-nats-service.localhost
     - server-A.routes.nats-service.localhost
     - server-A.routes.fake-nats-service.localhost
+    - server-B.clients.nats-service.localhost
+    - server-B.clients.fake-nats-service.localhost
+    - server-B.routes.nats-service.localhost
+    - server-B.routes.fake-nats-service.localhost
+    - server-C.clients.nats-service.localhost
+    - server-C.clients.fake-nats-service.localhost
+    - server-C.routes.nats-service.localhost
+    - server-C.routes.fake-nats-service.localhost
