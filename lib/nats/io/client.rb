@@ -1084,7 +1084,7 @@ module NATS
 
     def do_drain
       synchronize { @status = DRAINING_SUBS }
-      puts "#{@server_info[:client_id]} --- DRAINING!!!!!!!!!!!!!! #{@status}"
+      # puts "#{@server_info[:client_id]} --- DRAINING!!!!!!!!!!!!!! #{@status}"
 
       # Do unsubscribe protocol for all the susbcriptions, then have a single thread
       # waiting until all subs are done or drain timeout error reported to async error cb.
@@ -1101,12 +1101,12 @@ module NATS
       to_delete = []
 
       loop do
-        p :a
+        # p :a
         break if MonotonicTime::now > drain_timeout
         sleep 0.1
 
         # Wait until all subs are done.
-        p :b
+        # p :b
         @subs.each do |_, sub|
           if sub != @resp_sub and sub.pending_queue.size == 0
             to_delete << sub
@@ -1114,7 +1114,7 @@ module NATS
         end
         next if to_delete.empty?
 
-        p :c
+        # p :c
         to_delete.each do |sub|
           @subs.delete(sub.sid)
           # Stop messages delivery thread for async subscribers
@@ -1126,7 +1126,7 @@ module NATS
         to_delete.clear
 
         # Wait until only the resp mux is remaining or there are no subscriptions.
-        p :d
+        # p :d
         if @subs.count == 1
           sid, sub = @subs.first
           if sub == @resp_sub
@@ -1135,21 +1135,21 @@ module NATS
         elsif @subs.count == 0
           break
         end
-        p :e
+        # p :e
       end
 
       if MonotonicTime::now > drain_timeout
         e = NATS::IO::DrainTimeoutError.new("nats: draining connection timed out")
         err_cb_call(self, e, nil) if @err_cb
       end
-      p :f
+      # p :f
       synchronize { @status = DRAINING_PUBS }
 
       # Remove resp mux handler in case there is one.
-      p :g
+      # p :g
       unsubscribe(@resp_sub) if @resp_sub
 
-      puts "#{@server_info[:client_id]} CLOSING AFTER DRAIN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+      # puts "#{@server_info[:client_id]} CLOSING AFTER DRAIN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
       close
     end
 
@@ -1225,7 +1225,7 @@ module NATS
       should_bail = synchronize do
         connecting? || closed? || reconnecting?
       end
-      puts "#{Thread.current} :: SHOULD BAIL #{e} -- #{@status} -- #{should_bail}"
+      # puts "#{Thread.current} :: SHOULD BAIL #{e} -- #{@status} -- #{should_bail}"
       return if should_bail
 
       will_reconnect = false
@@ -1236,7 +1236,7 @@ module NATS
         # If we were connected and configured to reconnect,
         # then trigger disconnect and start reconnection logic
         if connected? and should_reconnect?
-          p :should_reconnect
+          # p :should_reconnect
           @status = RECONNECTING
           @io.close if @io
           @io = nil
@@ -1256,7 +1256,7 @@ module NATS
       end
 
       if will_reconnect
-        p :reconnectinggggggggggggggggggggggggggggggggggggggg
+        # p :reconnectinggggggggggggggggggggggggggggggggggggggg
         t = Thread.new do
           begin
             # Abort currently running reads in case they're around
@@ -1264,20 +1264,20 @@ module NATS
             # @read_loop_thread.exit if @read_loop_thread.alive?
             # @flusher_thread.exit if @flusher_thread.alive?
             # @ping_interval_thread.exit if @ping_interval_thread.alive?
-            puts "#{Thread.current} - STOPPING RECONNECT!"
+            # puts "#{Thread.current} - STOPPING RECONNECT!"
             stop_threads!
-            p :stopped_threads___________________
+            # p :stopped_threads___________________
           
             # Cannot attempt to reconnect under the lock!!!
             synchronize do
               attempt_reconnect
             end
           rescue NATS::IO::NoServersError => e
-            p :no_servers_______________________________________________
+            # p :no_servers_______________________________________________
             @last_err = e
             close
           rescue => e
-            puts "OK STOPPING THREADS!!!!! #{e}}"
+            # puts "OK STOPPING THREADS!!!!! #{e}}"
           end
         end
         
@@ -1287,7 +1287,7 @@ module NATS
       end
 
       # Otherwise close the connection to NATS
-      # p :closing_connectionnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+      # # p :closing_connectionnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
       close
     end
 
@@ -1297,30 +1297,30 @@ module NATS
         start = Time.now
         begin
           should_bail = false
-          puts "READ LOOP!"
+          # puts "READ LOOP!"
           synchronize do
             should_bail = closed? or reconnecting? or disconnected?
           end
-          puts "should bail on reading!!!!!!!!!!! #{@status} - #{should_bail}"
+          # puts "should bail on reading!!!!!!!!!!! #{@status} - #{should_bail}"
           if !@io or @io.closed? or should_bail
             return
           end
 
           # TODO: Remove timeout and just wait to be ready
-          puts "------------------------------ #{@server_info[:client_id]} Reading in #{start} #{@status}"
+          # puts "------------------------------ #{@server_info[:client_id]} Reading in #{start} #{@status}"
           data = @io.read(NATS::IO::MAX_SOCKET_READ_BYTES)
           now = Time.now
           @parser.parse(data) if data
-          puts "------------------------------ #{@server_info[:client_id]} Read in #{now - start}"
+          # puts "------------------------------ #{@server_info[:client_id]} Read in #{now - start}"
         rescue Errno::ETIMEDOUT
           # FIXME: We do not really need a timeout here...
-          # p :timeouttttttttttttttttttttttttttttttttttttttttttttttttttttttttt
+          # # p :timeouttttttttttttttttttttttttttttttttttttttttttttttttttttttttt
           retry
         rescue => e
           # In case of reading/parser errors, trigger reconnection logic in case desired.
           now = Time.now
-          puts "#{@server_info[:client_id]} - Read in #{now - start} #{e}"
-          puts "ERROR!!!!!!!!!!!!!! #{e}"
+          # puts "#{@server_info[:client_id]} - Read in #{now - start} #{e}"
+          # puts "ERROR!!!!!!!!!!!!!! #{e}"
           process_op_error(e)
           return
         end
@@ -1331,22 +1331,22 @@ module NATS
     # it is sending a command.
     def flusher_loop
       loop do
-        p :should_bail_maybe
+        # p :should_bail_maybe
         # Deadlock here?????
 
         # Blocks waiting for the flusher to be kicked...
-        p :waiting
+        # p :waiting
         @flush_queue.pop
-        p :done
+        # p :done
 
         a = rand(100)
         should_bail = false
         synchronize do
           should_bail = @status != CONNECTED and (@status == CONNECTING || @status == RECONNECTING)
-          puts " #{a} status:::::::::::::::::::: #{@status}: #{should_bail}"
+          # puts " #{a} status:::::::::::::::::::: #{@status}: #{should_bail}"
           @status != CONNECTED and (@status == CONNECTING || @status == RECONNECTING)
         end
-        puts " #{a} ======> should bail #{should_bail}"
+        # puts " #{a} ======> should bail #{should_bail}"
         return if should_bail
 
         # Skip in case nothing remains pending already.
@@ -1369,7 +1369,7 @@ module NATS
       begin
         @io.write(cmds.join) unless cmds.empty?
       rescue => e
-        puts "ERROR FLUSHING: #{e}"
+        # # puts "ERROR FLUSHING: #{e}"
         synchronize do
           @last_err = e
           err_cb_call(self, e, nil) if @err_cb
@@ -1383,7 +1383,7 @@ module NATS
     def ping_interval_loop
       loop do
         sleep @options[:ping_interval]
-        puts "FINISHED SLEEPING"
+        # puts "FINISHED SLEEPING"
 
         # Skip ping interval until connected
         next if !connected?
@@ -1394,7 +1394,7 @@ module NATS
         end
 
         @pings_outstanding += 1
-        puts "SENDING PING"
+        # puts "SENDING PING"
         send_command(PING_REQUEST)
         @flush_queue << :ping
       end
@@ -1484,7 +1484,7 @@ module NATS
 
     # Reconnect logic, this is done while holding the lock.
     def attempt_reconnect
-      p :reconnettttttttttttttttttttttttttttttttttttttttttttt
+      # p :reconnettttttttttttttttttttttttttttttttttttttttttttt
       @disconnect_cb.call(@last_err) if @disconnect_cb
 
       # Clear sticky error
@@ -1567,7 +1567,7 @@ module NATS
 
     # close_connection stops the internal threads, it should not be used while holding the lock.
     def close_connection(conn_status, do_cbs=true)
-      puts "CLOSING: #{@status} - #{conn_status} || #{do_cbs}"
+      # puts "CLOSING: #{@status} - #{conn_status} || #{do_cbs}"
       synchronize do
         if @status == CLOSED
           @status = conn_status
@@ -1577,15 +1577,15 @@ module NATS
       end
 
       a = rand(1000)
-      puts "#{@server_info[:client_id]}  #{a} CONTINUE.........................................."
+      # puts "#{@server_info[:client_id]}  #{a} CONTINUE.........................................."
       # Kick the flusher so it bails due to closed state.
       @flush_queue << :fallout if @flush_queue
       Thread.pass
-      puts " #{a} ___________________________________________________"
-      puts " #{a} ping    #{@ping_interval_thread.alive?}" if @ping_interval_thread
-      puts " #{a} flusher #{@flusher_thread.alive?}" if @flusher_thread
-      puts " #{a} read    #{@read_loop_thread.alive?}" if @read_loop_thread
-      puts " #{a} drain   #{@drain_t.alive?}" if @drain_t
+      # puts " #{a} ___________________________________________________"
+      # puts " #{a} ping    #{@ping_interval_thread.alive?}" if @ping_interval_thread
+      # puts " #{a} flusher #{@flusher_thread.alive?}" if @flusher_thread
+      # puts " #{a} read    #{@read_loop_thread.alive?}" if @read_loop_thread
+      # puts " #{a} drain   #{@drain_t.alive?}" if @drain_t
 
       # TODO: Delete any other state which we are not using here too.
       synchronize do
@@ -1620,7 +1620,7 @@ module NATS
         @subs.clear
 
         if do_cbs
-          # p :calling_callbacks
+          # # p :calling_callbacks
           @disconnect_cb.call(@last_err) if @disconnect_cb
           @close_cb.call if @close_cb
         end
@@ -1634,10 +1634,10 @@ module NATS
       end
 
       begin
-        puts "#{Thread.current} - STOPPING ON CLOSE!"
+        # puts "#{Thread.current} - STOPPING ON CLOSE!"
         stop_threads!
       rescue => e
-        puts "HERE??????? #{e}"
+        # puts "HERE??????? #{e}"
       end
     end
 
@@ -1662,27 +1662,27 @@ module NATS
     end
 
     def stop_threads!
-      puts "STOPPING THREADS!!!!!!!"
+      # puts "STOPPING THREADS!!!!!!!"
       # Ensure ping interval and flusher are not running anymore
       if @ping_interval_thread and @ping_interval_thread.alive?
         @ping_interval_thread.exit
       end
 
       if @flusher_thread and @flusher_thread.alive?
-        p :flusher
+        # p :flusher
         @flusher_thread.join(THREAD_STOP_TIMEOUT) unless @flusher_thread == Thread.current
-        p :joining
+        # p :joining
       end
 
       # This is blocking because it is reading and the state has changed.
-      p :read_loop
+      # p :read_loop
       if @read_loop_thread and @read_loop_thread.alive?
         if @drain_t and @drain_t.alive? and @drain_t == Thread.current
           # Force exit the reader thread in case it has not stopped
           # at this point of draining the connection.
           @read_loop_thread.exit
         elsif @read_loop_thread != Thread.current
-          p :joining_the_read_loop_thread
+          # p :joining_the_read_loop_thread
           @read_loop_thread.join(THREAD_STOP_TIMEOUT)
         end
       end
