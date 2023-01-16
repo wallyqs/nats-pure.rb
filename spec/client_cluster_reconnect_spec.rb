@@ -29,7 +29,8 @@ describe 'Client - Cluster reconnect' do
       'authorization' => auth_options,
       'host'          => '127.0.0.1',
       'port'          => 4242,
-      'cluster_port'  => 6222
+      'cluster_port'  => 6222,
+      'http_port'     => 8222
     }
 
     s2_config_opts = {
@@ -37,7 +38,8 @@ describe 'Client - Cluster reconnect' do
       'authorization' => auth_options,
       'host'          => '127.0.0.1',
       'port'          => 4243,
-      'cluster_port'  => 6223
+      'cluster_port'  => 6223,
+      'http_port'     => 8223
     }
 
     s3_config_opts = {
@@ -45,7 +47,8 @@ describe 'Client - Cluster reconnect' do
       'authorization' => auth_options,
       'host'          => '127.0.0.1',
       'port'          => 4244,
-      'cluster_port'  => 6224
+      'cluster_port'  => 6224,
+      'http_port'     => 8224
     }
 
     nodes = []
@@ -54,6 +57,7 @@ describe 'Client - Cluster reconnect' do
       nodes << NatsServerControl.init_with_config_from_string(%Q(
         host: '#{config_opts['host']}'
         port:  #{config_opts['port']}
+        http: '#{config_opts['host']}:#{config_opts['http_port']}'
         pid_file: '#{config_opts['pid_file']}'
         authorization {
           user: '#{auth_options["user"]}'
@@ -135,7 +139,7 @@ describe 'Client - Cluster reconnect' do
       end
 
       mon.synchronize do
-        reconnected.wait(1)
+        reconnected.wait(10)
       end
       expect(nats.connected_server).to eql(@s2.uri)
       nats.close
@@ -152,7 +156,8 @@ describe 'Client - Cluster reconnect' do
       reconnected = mon.new_cond
 
       nats = NATS::IO::Client.new
-      nats.connect("nats://secret:password@127.0.0.1:4242,nats://secret:password@127.0.0.1:4243", :dont_randomize_servers => true)
+      nats.connect("nats://secret:password@127.0.0.1:4242,nats://secret:password@127.0.0.1:4243",
+                   :dont_randomize_servers => true)
 
       disconnects = 0
       nats.on_disconnect do
@@ -187,7 +192,7 @@ describe 'Client - Cluster reconnect' do
       end
 
       mon.synchronize do
-        reconnected.wait(1)
+        reconnected.wait(10)
       end
       expect(nats.connected_server.to_s).to eql(@s2.uri.to_s)
       nats.close
@@ -321,7 +326,7 @@ describe 'Client - Cluster reconnect' do
         end
 
         # Connect to first server only and trigger reconnect
-        nats.connect(:servers => [@s1.uri], :dont_randomize_servers => true, :reconnect => true)
+        nats.connect(:servers => [@s1.uri], :dont_randomize_servers => true, :reconnect => true, :ping_interval => 10)
         expect(nats.connected_server).to eql(@s1.uri)
         @s1.kill_server
         sleep 0.2

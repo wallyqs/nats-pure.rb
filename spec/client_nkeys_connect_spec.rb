@@ -346,7 +346,7 @@ describe 'Client - NATS v2 Auth' do
           end
         end
         
-        nc.connect(servers: ['nc://127.0.0.1:4722'],
+        nc.connect(servers: ['nats://127.0.0.1:4722'],
                    reconnect: true,
                    reconnect_time_wait: 0.5,
                    user_credentials: "./spec/configs/nkeys/foo-user.creds")

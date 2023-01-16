@@ -7,7 +7,7 @@ desc 'Run specs from client'
 
 RSpec::Core::RakeTask.new(:spec) do |spec|
   spec.pattern = FileList['spec/**/*_spec.rb']
-  opts = ["--format", "documentation", "--colour"]
+  opts = ["--format", "documentation", "--colour", '--profile']
 
   # Skip TLS hostname verification tests since not supported
   # until after Ruby 2.4.0.  Also skip in JRuby since looks like support pending.

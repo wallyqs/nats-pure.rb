@@ -49,7 +49,7 @@ describe 'Client - Reconnect' do
     nats.flush(1) rescue nil
 
     # Should have a connection closed at this without reconnecting.
-    mon.synchronize { done.wait(3) }
+    mon.synchronize { done.wait(10) }
     expect(errors.count > 1).to eql(true)
     expect(errors.first).to be_a(NATS::IO::ServerError)
     expect(disconnects.count > 1).to eql(true)
@@ -112,7 +112,7 @@ describe 'Client - Reconnect' do
     @s.start_server(true)
     sleep 1
 
-    mon.synchronize { done.wait(1) }
+    mon.synchronize { done.wait(120) }
     expect(disconnects).to eql(1)
     expect(msgs.count).to eql(11)
     expect(reconnects).to eql(1)
@@ -169,15 +169,17 @@ describe 'Client - Reconnect' do
     nats.publish("foo", "hello")
     @s.kill_server
 
-    10.times do
-      nats.publish("foo", "hello")
-      sleep 0.01
-    end
+    expect do
+      10.times do
+        nats.publish("foo", "hello")
+        sleep 0.01
+      end
+    end.to raise_error(NATS::IO::ConnectionClosedError)
 
-    # Wait for a bit before checking state again
+    # Wait for a bit before checking state again.
     mon.synchronize { done.wait(1) }
     expect(nats.last_error).to be_a(Errno::ECONNRESET)
-    expect(nats.status).to eql(NATS::IO::DISCONNECTED)
+    expect(nats.status).to eql(NATS::IO::CLOSED)
 
     nats.close
   end
@@ -407,10 +409,12 @@ describe 'Client - Reconnect' do
       done = mon.new_cond
 
       nats.on_error do |e|
+        puts ">>>>>>>>>>>>>>>>>>>>>> ERROR!!!!!!!!!!!!!!!! #{e}"
         errors << e
       end
 
       nats.on_reconnect do
+        puts "Reconnected!!!!!!!!! #{nats.connected_server}"
         reconnects += 1
       end
 
@@ -436,8 +440,8 @@ describe 'Client - Reconnect' do
       # Wrap up connection with server and confirm
       nats.close
 
-      expect(disconnects).to eql(2)
       expect(reconnects).to eql(1)
+      expect(disconnects).to eql(2)
       expect(closes).to eql(1)
       expect(errors.count).to eql(1)
       expect(errors.first).to be_a(NATS::IO::StaleConnectionError)

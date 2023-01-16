@@ -25,6 +25,7 @@ describe 'Client - Drain' do
     future = Future.new
 
     nc.on_close do |err|
+      puts "CLOSING!!!!!!!!!!!"
       future.set_result(:closed)
     end
 
@@ -83,13 +84,16 @@ describe 'Client - Drain' do
     # Let the threads start accumulating some messages.
     sleep 3
 
-    # Start draining process asynchronously.
+    # Start draining process asynchronously, first drain connection
+    # that is responding to the messages.
     nc.drain
+    puts Time.now
     result = future.wait_for(30)
+    puts Time.now    
     expect(result).to eql(:closed)
     nc2.drain
     sleep 2
-    t.exit
+    t.join
   end
 
   it 'should report drain timeout error' do

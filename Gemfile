@@ -11,3 +11,7 @@ end
 group :v2 do
   gem 'nkeys'
 end
+
+group :integrations do
+  gem 'connection_pool'
+end
