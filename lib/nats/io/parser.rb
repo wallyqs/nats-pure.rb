@@ -94,7 +94,7 @@ module NATS
             @buf = nil if (@buf && @buf.empty?)
 
           when AWAITING_MSG_PAYLOAD
-            return unless (@needed && @buf.bytesize >= (@needed + CR_LF_SIZE))
+            return unless @buf and (@needed && @buf.bytesize >= (@needed + CR_LF_SIZE))
             if @header_needed
               hbuf = @buf.slice(0, @header_needed)
               payload = @buf.slice(@header_needed, (@needed-@header_needed))

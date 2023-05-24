@@ -59,6 +59,9 @@ module NATS
     # When drain takes too long to complete.
     class DrainTimeoutError < Error; end
 
+    # When the client has disconnected and switched to reconnecting state.
+    class DisconnectedError < Error; end
+
     # When an action cannot be done because connection is closed.
     class ConnectionClosedError < Error; end
   end

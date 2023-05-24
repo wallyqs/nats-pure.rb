@@ -15,3 +15,5 @@ end
 group :integrations do
   gem 'connection_pool'
 end
+
+gem "sidekiq", "~> 7.0"

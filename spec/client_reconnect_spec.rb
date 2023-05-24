@@ -67,52 +67,52 @@ describe 'Client - Reconnect' do
     reconnects = 0
     disconnects = 0
 
-    nats = NATS::IO::Client.new
+    nc = NATS::IO::Client.new
     mon = Monitor.new
     done = mon.new_cond
 
-    nats.on_error do |e|
+    nc.on_error do |e|
       errors << e
     end
 
-    nats.on_reconnect do
+    nc.on_reconnect do
       reconnects += 1
     end
 
-    nats.on_disconnect do
+    nc.on_disconnect do
       disconnects += 1
     end
 
-    nats.on_close do
+    nc.on_close do
       closes += 1
       mon.synchronize do
         done.signal
       end
     end
 
-    nats.connect
+    nc.connect
 
-    nats.subscribe("foo") do |msg|
+    nc.subscribe("foo") do |msg|
       msgs << msg
     end
 
-    nats.subscribe("bar") do |msg|
+    nc.subscribe("bar") do |msg|
       msgs << msg
     end
-    nats.flush
+    nc.flush
 
-    nats.publish("foo", "hello.0")
-    nats.flush
+    nc.publish("foo", "hello.0")
+    nc.flush
     @s.kill_server
 
     1.upto(10).each do |n|
-      nats.publish("foo", "hello.#{n}")
+      nc.publish("foo", "hello.#{n}")
       sleep 0.1
     end
     @s.start_server(true)
     sleep 1
 
-    mon.synchronize { done.wait(120) }
+    mon.synchronize { done.wait(10) }
     expect(disconnects).to eql(1)
     expect(msgs.count).to eql(11)
     expect(reconnects).to eql(1)
@@ -122,9 +122,9 @@ describe 'Client - Reconnect' do
     # was interrupted during send but at least some which
     # were pending during reconnect should have made it.
     expect(msgs.count > 5).to eql(true)
-    expect(nats.status).to eql(NATS::IO::CONNECTED)
+    expect(nc.status).to eql(NATS::IO::CONNECTED)
 
-    nats.close
+    nc.close
   end
 
   it 'should abort reconnecting if disabled' do
@@ -409,12 +409,10 @@ describe 'Client - Reconnect' do
       done = mon.new_cond
 
       nats.on_error do |e|
-        puts ">>>>>>>>>>>>>>>>>>>>>> ERROR!!!!!!!!!!!!!!!! #{e}"
         errors << e
       end
 
       nats.on_reconnect do
-        puts "Reconnected!!!!!!!!! #{nats.connected_server}"
         reconnects += 1
       end
 
