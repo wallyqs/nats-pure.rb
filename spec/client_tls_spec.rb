@@ -235,6 +235,7 @@ describe 'Client - TLS spec' do
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
       end.to_not raise_error
+      nats.close
     end
   end
 
@@ -300,6 +301,7 @@ describe 'Client - TLS spec' do
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
       end.to_not raise_error
+      nats.close
     end
 
     it 'should not be able to connect if using wrong server hostname' do
@@ -321,6 +323,7 @@ describe 'Client - TLS spec' do
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
       end.to raise_error(OpenSSL::SSL::SSLError)
+      nats.close
     end
   end
 
@@ -382,6 +385,7 @@ describe 'Client - TLS spec' do
 
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
+        nats.close
       end.to_not raise_error
     end
 
@@ -408,6 +412,7 @@ describe 'Client - TLS spec' do
 
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
+        nats.close
       end.to raise_error(OpenSSL::SSL::SSLError)
     end
 

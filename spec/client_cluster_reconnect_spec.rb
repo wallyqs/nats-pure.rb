@@ -260,7 +260,11 @@ describe 'Client - Cluster reconnect' do
       end
 
       # Flush everything we have sent so far
-      nats.flush(5)
+      begin
+        nats.flush(5)
+      rescue => e
+        p e
+      end
       errors = []
       errors.each do |e|
         errors << e

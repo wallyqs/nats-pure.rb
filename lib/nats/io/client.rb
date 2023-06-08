@@ -1,4 +1,4 @@
-# Copyright 2016-2021 The NATS Authors
+# Copyright 2016-2023 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -153,10 +153,18 @@ module NATS
       # Parser with state
       @parser = NATS::Protocol::Parser.new(self)
 
-      # Threads for both reading and flushing command
-      @flusher_thread = nil
-      @read_loop_thread = nil
-      @ping_interval_thread = nil
+      # Threads for both reading and flushing command.
+      @flusher_t = nil
+      @read_loop_t = nil
+      @ping_interval_t = nil
+
+      # Thread to handle reconnect self-heal and closing the connection gracefully.
+      @conn_manager_t = nil
+      @conn_state_q = nil
+      @conn_err_q = nil
+      @flusher_ctrl_q = nil
+      @read_loop_ctrl_q = nil
+      @drain_t = nil
 
       # Info that we get from the server
       @server_info = { }
@@ -223,10 +231,8 @@ module NATS
       # Tokens
       @auth_token = nil
 
+      # Inbox for the Request/Response API.
       @inbox_prefix = "_INBOX"
-
-      # Draining
-      @drain_t = nil
 
       # Keep track of all client instances to handle them after process forking in Ruby 3.1+
       INSTANCES[self] = self if !defined?(Ractor) || Ractor.current == Ractor.main # Ractors doesn't work in forked processes
@@ -408,12 +414,17 @@ module NATS
       @pings_outstanding = 0
       @pongs_received = 0
       @pending_size = 0
+      @conn_state_q = Queue.new
+      @flusher_ctrl_q = Queue.new
+      @read_loop_ctrl_q = Queue.new
+      @conn_err_q = Queue.new
 
       # Server roundtrip went ok so consider to be connected at this point
       @status = CONNECTED
 
-      # Connected to NATS so Ready to start parser loop, flusher and ping interval
+      # Connected to NATS so ready to start parser loop, flusher and ping interval.
       start_threads!
+      start_conn_manager!
 
       self
     end
@@ -774,6 +785,10 @@ module NATS
       @status == RECONNECTING
     end
 
+    def disconnected?
+      @status == DISCONNECTED
+    end
+
     def closed?
       @status == CLOSED
     end
@@ -840,6 +855,8 @@ module NATS
 
     private
 
+    THREAD_STOP_TIMEOUT = 120
+
     def validate_settings!
       raise(NATS::IO::ClientError, "custom inbox may not include '>'") if @inbox_prefix.include?(">")
       raise(NATS::IO::ClientError, "custom inbox may not include '*'") if @inbox_prefix.include?("*")
@@ -850,8 +867,7 @@ module NATS
     def process_info(line)
       parsed_info = JSON.parse(line)
 
-      # INFO can be received asynchronously too,
-      # so has to be done under the lock.
+      # INFO can be received asynchronously too, so has to be done under the lock.
       synchronize do
         # Symbolize keys from parsed info line
         @server_info = parsed_info.reduce({}) do |info, (k,v)|
@@ -1074,7 +1090,7 @@ module NATS
     end
 
     def send_command(command)
-      raise NATS::IO::ConnectionClosedError if closed?
+      raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
 
       @pending_size += command.bytesize
       @pending_queue << command
@@ -1264,6 +1280,8 @@ module NATS
       should_bail = synchronize do
         connecting? || closed? || reconnecting?
       end
+      puts "OP ERROR: #{e} :::::::::::::: #{should_bail} - #{@status}"
+      puts e.backtrace
       return if should_bail
 
       synchronize do
@@ -1272,64 +1290,113 @@ module NATS
 
         # If we were connected and configured to reconnect,
         # then trigger disconnect and start reconnection logic
+        p :SHOULD_RECONNECTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+        puts "will reconnect: #{connected?} #{should_reconnect?}"
         if connected? and should_reconnect?
-          @status = RECONNECTING
-          @io.close if @io
-          @io = nil
+          # @status = RECONNECTING
+          # @io.close if @io
+          # @io = nil
 
-          # TODO: Reconnecting pending buffer?
+          # # TODO: Reconnecting pending buffer?
 
-          # Do reconnect under a different thread than the one
-          # in which we got the error.
-          Thread.new do
-            begin
-              # Abort currently running reads in case they're around
-              # FIXME: There might be more graceful way here...
-              @read_loop_thread.exit if @read_loop_thread.alive?
-              @flusher_thread.exit if @flusher_thread.alive?
-              @ping_interval_thread.exit if @ping_interval_thread.alive?
+          # # Do reconnect under a different thread than the one
+          # # in which we got the error.
+          # Thread.new do
+          #   begin
+          #     # Abort currently running reads in case they're around
+          #     # FIXME: There might be more graceful way here...
+          #     @read_loop_t.exit if @read_loop_t.alive?
+          #     @flusher_t.exit if @flusher_t.alive?
+          #     @ping_interval_t.exit if @ping_interval_t.alive?
 
-              attempt_reconnect
-            rescue NATS::IO::NoServersError => e
-              @last_err = e
-              close
-            end
-          end
+          #     attempt_reconnect
+          #   rescue NATS::IO::NoServersError => e
+          #     @last_err = e
+          #     close
+          #   end
+          # end
 
-          Thread.exit
-          return
+          # Thread.exit
+          # return
+          @conn_state_q << :reconnecting
+        else
+          # Otherwise, stop trying to reconnect and close the connection
+          @conn_state_q << :close
         end
-
-        # Otherwise, stop trying to reconnect and close the connection
-        @status = DISCONNECTED
+        # # Otherwise, stop trying to reconnect and close the connection
+        # @status = DISCONNECTED
       end
 
       # Otherwise close the connection to NATS
-      close
+      # puts :OTHERWISE_CLOSE
+      # close
     end
 
     # Gathers data from the socket and sends it to the parser.
     def read_loop
+      io = synchronize { @io }
       loop do
         begin
-          should_bail = synchronize do
-            # FIXME: In case of reconnect as well?
-            @status == CLOSED or @status == RECONNECTING
+          # should_bail = synchronize do
+          #   # FIXME: In case of reconnect as well?
+          #   @status == CLOSED or @status == RECONNECTING
+          # end
+          # if !@io or @io.closed? or should_bail
+          #   return
+          # end
+          should_bail = false
+          reconnecting = false
+          synchronize do
+            # should_bail = closed? or disconnected?
+            # reconnecting = reconnecting?
+            puts "RECONNECTING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" if reconnecting
+            should_bail = !connected? and (connecting? || reconnecting?)
           end
-          if !@io or @io.closed? or should_bail
-            return
-          end
+          next if should_bail
 
           # TODO: Remove timeout and just wait to be ready
-          data = @io.read(NATS::IO::MAX_SOCKET_READ_BYTES)
+          p io
+          data = io.read(NATS::IO::MAX_SOCKET_READ_BYTES)
           @parser.parse(data) if data
         rescue Errno::ETIMEDOUT
           # FIXME: We do not really need a timeout here...
           retry
+        rescue IOError => e
+          p :ioerror
+          puts "IOError #{e.message} #{@status}"
+          puts e.backtrace
         rescue => e
-          # In case of reading/parser errors, trigger
-          # reconnection logic in case desired.
-          process_op_error(e)
+          # # In case of reading/parser errors, trigger
+          # # reconnection logic in case desired.
+          # process_op_error(e)
+          reconnected = nil
+          synchronize do
+            reconnecting = reconnecting?
+            reconnected = io != @io
+            should_bail = disconnected? or reconnecting or reconnected
+          end
+          puts "IO CHANGED? #{@io == @io} #{io == io} #{@io != io} "
+          puts "should bail on reading!!!!!!!!!!! #{@status} - #{should_bail} :: #{e} :: #{io.inspect} - #{@io.inspect}"
+          break if closed?
+          if reconnected
+            io = synchronize { @io }
+            next
+          end
+          next if should_bail
+
+          # If got an error during reading maybe the IO got replaced underneath.
+          # break if closed?
+
+          # Might be entering reconnecting state.
+          if reconnecting
+            puts "RECONNECTING AFTER ERROR ALREAADY, NEED SIGNAL TO CONTINUE"
+          else
+            # In case of reading/parser errors, trigger reconnection logic in case desired.
+            # now = Time.now
+            # puts "#{@server_info[:client_id]} - Read in #{now - start} #{e}"
+            puts "ERROR!!!!!!!!!!!!!! #{e.class}"
+            process_op_error(e)
+          end
         end
       end
     end
@@ -1338,21 +1405,49 @@ module NATS
     # it is sending a command.
     def flusher_loop
       loop do
-        # Blocks waiting for the flusher to be kicked...
-        @flush_queue.pop
+        # # Blocks waiting for the flusher to be kicked...
+        # @flush_queue.pop
 
-        should_bail = synchronize do
-          @status != CONNECTED || @status == CONNECTING
-        end
-        return if should_bail
+        # should_bail = synchronize do
+        #   @status != CONNECTED || @status == CONNECTING
+        # end
+        # return if should_bail
 
-        # Skip in case nothing remains pending already.
-        next if @pending_queue.empty?
+        # # Skip in case nothing remains pending already.
+        # next if @pending_queue.empty?
 
-        force_flush!
+        # force_flush!
 
-        synchronize do
-          @pending_size = 0
+        # synchronize do
+        #   @pending_size = 0
+        # end
+        begin
+          p :should_bail_maybe
+          # Deadlock here?????
+
+          # Blocks waiting for the flusher to be kicked...
+          p :flusher_waiting
+          a = @flush_queue.pop
+          p "TYPE: #{a}"
+          p :done_waiting
+
+          a = rand(100)
+          should_bail = false
+          synchronize do
+            should_bail = !connected? and (connecting? || reconnecting?)
+            puts " #{a} status:::::::::::::::::::: #{@status}: #{should_bail}"
+            # @status != CONNECTED and (@status == CONNECTING || @status == RECONNECTING)
+          end
+          # puts " #{a} ======> should bail #{should_bail}"
+          break if closed?
+          next if should_bail or @pending_queue.empty?
+          force_flush!
+
+          synchronize do
+            @pending_size = 0
+          end
+        rescue => e
+          p "FLUSH ERRPR: #{e}"
         end
       end
     end
@@ -1384,6 +1479,7 @@ module NATS
         next if !connected?
 
         if @pings_outstanding >= @options[:max_outstanding_pings]
+          puts "PINGs!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1"
           process_op_error(NATS::IO::StaleConnectionError.new("nats: stale connection"))
           return
         end
@@ -1478,6 +1574,7 @@ module NATS
 
     # Reconnect logic, this is done while holding the lock.
     def attempt_reconnect
+      puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~ RECONNECTING #{@stats[:reconnects]}"
       @disconnect_cb.call(@last_err) if @disconnect_cb
 
       # Clear sticky error
@@ -1489,9 +1586,11 @@ module NATS
         srv = select_next_server
 
         # Establish TCP connection with new server
+        puts "RECONNECTING: AAAAAAAAAAAAAAA: #{@io.inspect}"
         @io = create_socket
         @io.connect
         @stats[:reconnects] += 1
+        puts "RECONNECTING: BBBBBBBBBBBBBBB: #{@io.inspect}"
 
         # Set hostname to use for TLS hostname verification
         if client_using_secure_connection? and single_url_connect_used?
@@ -1503,6 +1602,7 @@ module NATS
 
         # Established TCP connection successfully so can start connect
         process_connect_init
+        p :connect_init___________________________________________________
 
         # Reset reconnection attempts if connection is valid
         srv[:reconnect_attempts] = 0
@@ -1511,8 +1611,13 @@ module NATS
         # Add back to rotation since successfully connected
         server_pool << srv
       rescue NATS::IO::NoServersError => e
+        # Close connection???
+        @last_err = e
+        @conn_state_q << :close
         raise e
       rescue => e
+        p e
+        puts e.backtrace
         # In case there was an error from the server check
         # to see whether need to take it out from rotation
         srv[:auth_required] ||= true if @server_info[:auth_required]
@@ -1559,33 +1664,49 @@ module NATS
     end
 
     def close_connection(conn_status, do_cbs=true)
+      a = rand(100)
+      puts "#{a} :: #{conn_status} :: #{closed?} :: CLOSING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1 #{conn_status} :: #{@status}"
       synchronize do
-        @connect_called = false
+        # Skip if already closed.
         if @status == CLOSED
+          @connect_called = false
           @status = conn_status
+          p :returningggggggggg
           return
         end
+        @status = conn_status
       end
 
       # Kick the flusher so it bails due to closed state
       @flush_queue << :fallout if @flush_queue
       Thread.pass
+      p :passiiiiiiiiiiiiiiiii
+
+      begin
 
       # FIXME: More graceful way of handling the following?
       # Ensure ping interval and flusher are not running anymore
-      if @ping_interval_thread and @ping_interval_thread.alive?
-        @ping_interval_thread.exit
+      if @ping_interval_t and @ping_interval_t.alive? and @ping_interval_t != Thread.current
+        @ping_interval_t.exit
       end
 
-      if @flusher_thread and @flusher_thread.alive?
-        @flusher_thread.exit
+      if @flusher_t and @flusher_t.alive? and @flusher_t != Thread.current
+        @flusher_t.exit
+      end 
+
+      if @read_loop_t and @read_loop_t.alive? and @read_loop_t != Thread.current
+        @read_loop_t.exit
       end
 
-      if @read_loop_thread and @read_loop_thread.alive?
-        @read_loop_thread.exit
+      rescue => e
+        p e
+      ensure
+        puts "#{a} :: ASDFASDFASDFASDFASDFASDFASDFASDF"
+        p :_________AAAAAAA_____
       end
 
       # TODO: Delete any other state which we are not using here too.
+      puts "___________________________CLOSING:AAAAAAAAAAAAAAAAAAAAA ____________"
       synchronize do
         @pongs.synchronize do
           @pongs.each do |pong|
@@ -1633,18 +1754,92 @@ module NATS
       end
     end
 
+    def start_conn_manager!
+      @conn_manager_t = Thread.new do
+        loop do
+          state = @conn_state_q.pop
+
+          case state
+          when :connected
+            # synchronize { start_threads! }
+          when :reconnecting
+            synchronize do
+              p :START_RECONNECTING________________________________________
+              @status = RECONNECTING
+              @io.close if @io and not @io.closed?
+              # @io = nil
+              # @flush_queue << :fallout if @flush_queue
+
+              begin
+                attempt_reconnect
+              rescue => e
+                p e
+              end
+            end
+          when :draining
+            # TODO: apply drain and close connection eventually.
+          when :close
+            # When either the flusher or read loop trigger the disconnection.
+            close_connection(CLOSED, true)
+            break
+          end
+        end
+      end
+    end
+
     def start_threads!
-      # Reading loop for gathering data
-      @read_loop_thread = Thread.new { read_loop }
-      @read_loop_thread.abort_on_exception = true
+      # Reading loop for gathering data.
+      @read_loop_t = Thread.new do
+        read_loop
+      end
+      @read_loop_t.abort_on_exception = true
 
-      # Flusher loop for sending commands
-      @flusher_thread = Thread.new { flusher_loop }
-      @flusher_thread.abort_on_exception = true
+      # Flusher loop for sending commands.
+      @flusher_t = Thread.new do
+        flusher_loop
+      end
+      @flusher_t.abort_on_exception = true
 
-      # Ping interval handling for keeping alive the connection
-      @ping_interval_thread = Thread.new { ping_interval_loop }
-      @ping_interval_thread.abort_on_exception = true
+      # Ping interval handling for keeping alive the connection.
+      # TODO: Remove as part of the flusher instead and make it
+      # activity based.
+      @ping_interval_t = Thread.new do
+        ping_interval_loop
+      end
+      @ping_interval_t.abort_on_exception = true
+    end
+
+    def stop_threads!
+      # Do not stop the threads and instead handle interrupts,
+      # stopping the threads.
+
+      # Ensure ping interval and flusher are not running anymore
+      if @ping_interval_t and @ping_interval_t.alive?
+        @ping_interval_t.exit
+      end
+
+      if @flusher_t and @flusher_t.alive?
+        a = Time.now
+        puts "#{a} :flusher"
+        @flusher_t.join(THREAD_STOP_TIMEOUT) unless @flusher_t == Thread.current
+        puts "#{Time.now - a}: flusher stop"
+      end
+
+      # This is blocking because it is reading and the state has changed.
+      # p :read_loop
+      if @read_loop_t and @read_loop_t.alive?
+        if @drain_t and @drain_t.alive? and @drain_t == Thread.current
+          # Force exit the reader thread in case it has not stopped
+          # at this point of draining the connection.
+          @read_loop_t.exit
+        elsif @read_loop_t != Thread.current
+          p :joining_the_read_loop_t
+          a = Time.now
+          puts "#{a} : joining the read loop"
+          @read_loop_t.join(THREAD_STOP_TIMEOUT)
+          puts "#{Time.now - a}: joining read loop"
+        end
+      end
     end
 
     # Prepares requests subscription that handles the responses
@@ -1979,7 +2174,7 @@ module NATS
 
         begin
           sock.connect_nonblock(sockaddr)
-        rescue Errno::EINPROGRESS, Errno::EALREADY, ::IO::WaitWritable
+        rescue Errno::EINPROGRESS, Errno::EALREADY, ::IO::WaitWritable, ::IO::EINPROGRESSWaitWritable
           unless ::IO.select(nil, [sock], nil, @connect_timeout)
             raise NATS::IO::SocketTimeoutError
           end
