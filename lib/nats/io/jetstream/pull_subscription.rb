@@ -212,6 +212,12 @@ module NATS
       # @option params [Integer] :max_bytes Most bytes to keep asked for instead, as
       #   the server counts them: the subject, reply, header and data of each message.
       #   Not with :max_messages.
+      # @option params [Integer] :bytes_limit Most bytes that each pull takes, with
+      #   :max_messages messages kept asked for, like PullMaxMessagesWithBytesLimit of
+      #   nats.go. Unlike :max_bytes, it does not limit the bytes asked for in all, and
+      #   a message larger than it stalls the consumption. Not with :max_bytes.
+      # @option params [Integer] :stop_after Stop once this many messages were taken,
+      #   like StopAfter of nats.go, pulling no more than that.
       # @option params [Float] :expires Seconds after which each pull expires, at
       #   least 1, 30 by default.
       # @option params [Float] :heartbeat Seconds between the idle heartbeats of the

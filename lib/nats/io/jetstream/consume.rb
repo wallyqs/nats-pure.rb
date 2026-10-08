@@ -24,7 +24,8 @@ module NATS
     # more once fewer than the threshold remain. Each pull expires after
     # expires seconds, and the server sends idle heartbeats to it, which
     # tell it that the server is still there. After a reconnect, or when
-    # the heartbeats stop, it pulls again.
+    # the heartbeats stop, it pulls again. With stop_after, it stops once it
+    # returned that many messages.
     #
     # @example Iterate over the messages of a pull subscription.
     #
@@ -70,6 +71,8 @@ module NATS
         @sub = @nc.subscribe(@nc.new_inbox)
         @pending_msgs = 0
         @pending_bytes = 0
+        # Messages returned so far, for stop_after.
+        @delivered = 0
         @reconnects = @nc.stats[:reconnects]
         @closed = nil
         @draining = false
@@ -162,13 +165,14 @@ module NATS
         def consume_opts(params)
           max_messages = params[:max_messages]
           max_bytes = params[:max_bytes]
-          [[:max_messages, max_messages], [:max_bytes, max_bytes],
-            [:threshold_messages, params[:threshold_messages]], [:threshold_bytes, params[:threshold_bytes]]].each do |name, value|
+          %i[max_messages max_bytes bytes_limit threshold_messages threshold_bytes stop_after].each do |name|
+            value = params[name]
             next if value.nil? || (value.is_a?(Integer) && value >= 1)
 
             raise ArgumentError.new("nats: #{name} should be an integer of at least 1")
           end
           raise ArgumentError.new("nats: only one of max_messages and max_bytes can be given") if max_messages && max_bytes
+          raise ArgumentError.new("nats: only one of max_bytes and bytes_limit can be given") if max_bytes && params[:bytes_limit]
 
           max_messages = max_bytes ? BYTES_ONLY_BATCH : (max_messages || DEFAULT_MAX_MESSAGES)
           expires = params[:expires] || DEFAULT_EXPIRES
@@ -189,6 +193,8 @@ module NATS
             heartbeat: heartbeat,
             threshold_messages: params[:threshold_messages] || (max_messages / 2.0).ceil,
             threshold_bytes: params[:threshold_bytes] || (max_bytes && (max_bytes / 2.0).ceil),
+            bytes_limit: params[:bytes_limit],
+            stop_after: params[:stop_after],
             **params.slice(:group, :min_pending, :min_ack_pending, :priority)
           }
         end
@@ -230,10 +236,14 @@ module NATS
 
           @psub.send(:track_pin, msg)
           msg.sub = @psub
-          @sub.synchronize do
+          done = @sub.synchronize do
             @pending_msgs -= 1
             @pending_bytes -= JS.msg_size(msg) if @opts[:max_bytes]
+            @delivered += 1
+            @opts[:stop_after] && @delivered >= @opts[:stop_after]
           end
+          # The last message to take: stop pulling, and close once it is returned.
+          close(:stopped) if done
           return msg
         end
       end
@@ -296,8 +306,16 @@ module NATS
           if @opts[:max_bytes]
             req[:batch] = @opts[:max_messages]
             req[:max_bytes] = @opts[:max_bytes] - @pending_bytes
+          elsif @opts[:bytes_limit]
+            # Each pull takes at most these bytes, which are not counted.
+            req[:max_bytes] = @opts[:bytes_limit]
           end
-          @pending_msgs = @opts[:max_messages]
+          # Ask for no more than the messages left to take.
+          req[:batch] = [req[:batch], @opts[:stop_after] - @delivered - @pending_msgs].min if @opts[:stop_after]
+          next if req[:batch] <= 0
+
+          # With stop_after, a pull can ask for fewer: count what it asks for.
+          @pending_msgs = @opts[:stop_after] ? @pending_msgs + req[:batch] : @opts[:max_messages]
           @pending_bytes = @opts[:max_bytes] || 0
           req
         end
