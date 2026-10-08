@@ -120,6 +120,8 @@ module NATS
       # @raise [NATS::Timeout] When a fetch that waits got no messages before its timeout.
       # @raise [ArgumentError] When the timeout is not a finite positive number, or a
       #   minimum is not an integer of at least 1.
+      # @raise [NATS::IO::InvalidArg] When the heartbeat is not a finite positive
+      #   number less than half the timeout, like ErrInvalidArg of nats.go.
       # @raise [NATS::JetStream::Error::PinIdMismatch] With the pinned_client priority
       #   policy, when the server turned the pull of the fetch away before it got
       #   messages, as the subscription is no longer pinned: its pin expired or it
@@ -154,11 +156,11 @@ module NATS
         heartbeat = params[:heartbeat]
         if heartbeat
           unless heartbeat.is_a?(Numeric) && heartbeat.positive? && heartbeat.finite?
-            raise ArgumentError.new("nats: heartbeat should be a finite positive number")
+            raise ::NATS::IO::InvalidArg.new("nats: heartbeat should be a finite positive number")
           end
           raise ArgumentError.new("nats: heartbeat cannot be used with no_wait") if params[:no_wait]
           # Like nats.go, which the server would refuse otherwise.
-          raise ArgumentError.new("nats: heartbeat should be less than half the timeout") if heartbeat * 2 >= timeout
+          raise ::NATS::IO::InvalidArg.new("nats: heartbeat should be less than half the timeout") if heartbeat * 2 >= timeout
         end
 
         deadline = MonotonicTime.now + timeout

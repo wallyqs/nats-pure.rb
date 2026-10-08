@@ -54,6 +54,9 @@ module NATS
     class ClientCertOrRootCAsRequired < ArgumentError
     end
 
+    class InvalidArg < ArgumentError
+    end
+
     class TokenAlreadySet < ArgumentError
     end
 

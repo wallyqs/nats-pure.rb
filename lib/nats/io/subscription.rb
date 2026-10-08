@@ -70,7 +70,7 @@ module NATS
         [msgs_limit, bytes_limit].each do |limit|
           next if limit.is_a?(Integer) && !limit.zero?
 
-          raise ArgumentError, "nats: invalid argument: pending limits must be non-zero Integers"
+          raise NATS::IO::InvalidArg, "nats: invalid argument: pending limits must be non-zero Integers"
         end
       end
     end
@@ -196,7 +196,7 @@ module NATS
     # once, also when lower than the messages already pending, which stay.
     # @param msgs_limit [Integer] The messages, negative to not limit them.
     # @param bytes_limit [Integer] The bytes, negative to not limit them.
-    # @raise [ArgumentError] When a limit is zero, like ErrInvalidArg.
+    # @raise [NATS::IO::InvalidArg] When a limit is zero, like ErrInvalidArg.
     # @raise [NATS::IO::BadSubscription] When the subscription is closed.
     def set_pending_limits(msgs_limit, bytes_limit)
       Subscription.check_pending_limits!(msgs_limit, bytes_limit)
