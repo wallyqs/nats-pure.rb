@@ -1353,14 +1353,25 @@ module NATS
 
       if @tls
         files = @tls.slice(:cert_file, :key_file, :ca_file).compact
-        if @tls[:context] && files.any?
-          raise ArgumentError, "nats: tls context cannot be combined with #{files.keys.join(", ")}"
+        cbs = @tls.slice(:cert_cb, :ca_cb).compact
+        if @tls[:context] && (files.any? || cbs.any?)
+          raise ArgumentError, "nats: tls context cannot be combined with #{files.merge(cbs).keys.join(", ")}"
         end
         if files.key?(:cert_file) != files.key?(:key_file)
           raise ArgumentError, "nats: tls cert_file and key_file must be given together"
         end
-        # Load the files now, so that a bad one fails the connect.
-        tls_context if files.any?
+        # Like ClientTLSConfig of nats.go, which takes either callback.
+        if (@tls.key?(:cert_cb) || @tls.key?(:ca_cb)) && cbs.empty?
+          raise NATS::IO::ClientCertOrRootCAsRequired, "nats: at least one of cert_cb or ca_cb must be set"
+        end
+        cbs.each do |name, cb|
+          raise ArgumentError, "nats: tls #{name} must respond to call" unless cb.respond_to?(:call)
+        end
+        raise ArgumentError, "nats: tls cert_cb cannot be combined with cert_file" if cbs[:cert_cb] && files[:cert_file]
+        raise ArgumentError, "nats: tls ca_cb cannot be combined with ca_file" if cbs[:ca_cb] && files[:ca_file]
+        # Load the files and call the callbacks now, so that a bad one
+        # fails the connect.
+        tls_context if files.any? || cbs.any?
       end
 
       %i[reconnect_jitter reconnect_jitter_tls].each do |opt|
@@ -1698,7 +1709,15 @@ module NATS
       # Allow prepared context and customizations via :tls opts
       return @tls[:context] if @tls[:context]
 
-      @tls_context ||= OpenSSL::SSL::SSLContext.new.tap do |tls_context|
+      # With cert_cb or ca_cb, a new context for each (re)connect, like
+      # TLSCertCB and RootCAsCB of nats.go.
+      return new_tls_context if @tls[:cert_cb] || @tls[:ca_cb]
+
+      @tls_context ||= new_tls_context
+    end
+
+    def new_tls_context
+      OpenSSL::SSL::SSLContext.new.tap do |tls_context|
         # Use the default verification options from Ruby:
         # https://github.com/ruby/ruby/blob/96db72ce38b27799dd8e80ca00696e41234db6ba/ext/openssl/lib/openssl/ssl.rb#L19-L29
         #
@@ -1714,10 +1733,33 @@ module NATS
           tls_context.cert_store = store
         end
 
+        # Or those of the store that ca_cb returns, like RootCAsCB.
+        if @tls[:ca_cb]
+          store = @tls[:ca_cb].call
+          raise TypeError, "nats: tls ca_cb must return an OpenSSL::X509::Store" unless store.is_a?(OpenSSL::X509::Store)
+
+          tls_context.cert_store = store
+        end
+
         # Present a client certificate, like ClientCert of nats.go.
         if @tls[:cert_file]
           tls_context.cert = OpenSSL::X509::Certificate.new(File.read(@tls[:cert_file]))
           tls_context.key = OpenSSL::PKey.read(File.read(@tls[:key_file]))
+        end
+
+        # Or the one that cert_cb returns, like TLSCertCB: a certificate
+        # and its key, as objects or PEM, and optionally the chain to send.
+        if @tls[:cert_cb]
+          cert, key, chain = @tls[:cert_cb].call
+          cert = OpenSSL::X509::Certificate.new(cert) if cert.is_a?(String)
+          key = OpenSSL::PKey.read(key) if key.is_a?(String)
+          unless cert.is_a?(OpenSSL::X509::Certificate) && key.is_a?(OpenSSL::PKey::PKey)
+            raise TypeError, "nats: tls cert_cb must return a certificate and its key"
+          end
+
+          tls_context.cert = cert
+          tls_context.key = key
+          tls_context.extra_chain_cert = Array(chain) if chain
         end
       end
     end
