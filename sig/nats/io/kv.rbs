@@ -33,6 +33,8 @@ module NATS
 
     def initialize: (Hash[Symbol, untyped]) -> void
 
+    def bucket: () -> String
+
     def get: (String, ?Hash[Symbol, untyped]) -> NATS::KeyValue::Entry
 
     private def _get: (String, ?Hash[Symbol, untyped]) -> NATS::KeyValue::Entry
