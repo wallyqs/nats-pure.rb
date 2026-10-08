@@ -40,6 +40,12 @@ module NATS
       class InvalidJetStreamResponse < NATS::JetStream::Error
       end
 
+      class TooManyStalledMsgs < NATS::JetStream::Error
+      end
+
+      class AsyncPublishTimeout < NATS::JetStream::Error
+      end
+
       class APIError < NATS::JetStream::Error
         attr_reader code: Integer
         attr_reader err_code: Integer
