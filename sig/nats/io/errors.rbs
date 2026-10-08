@@ -54,6 +54,24 @@ module NATS
     class ClientCertOrRootCAsRequired < ArgumentError
     end
 
+    class TokenAlreadySet < ArgumentError
+    end
+
+    class UserInfoAlreadySet < ArgumentError
+    end
+
+    class NkeyAndUser < ArgumentError
+    end
+
+    class UserButNoSigCB < ArgumentError
+    end
+
+    class NkeyButNoSigCB < ArgumentError
+    end
+
+    class WebSocketHeadersAlreadySet < ArgumentError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 
