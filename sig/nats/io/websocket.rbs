@@ -30,6 +30,8 @@ module NATS
       MAX_HANDSHAKE_RESPONSE_SIZE: Integer
 
       @compression: bool?
+      @headers: Hash[String | Symbol, String | Array[String]]?
+      @headers_handler: Proc?
       @compressed: bool
       @handshaked: bool
       @rbuf: String
@@ -63,6 +65,8 @@ module NATS
       def raw_write: (String, ?Numeric?) -> void
 
       def handshake: () -> void
+
+      def header_lines: () -> Array[String]
 
       def request_path: () -> String
 

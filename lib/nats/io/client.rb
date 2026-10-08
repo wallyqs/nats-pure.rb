@@ -1311,6 +1311,17 @@ module NATS
         raise ArgumentError, "nats: custom_reconnect_delay must respond to call"
       end
 
+      # Like nats.go, either static websocket headers or a handler.
+      if @options[:ws_headers_handler] && !@options[:ws_headers_handler].respond_to?(:call)
+        raise ArgumentError, "nats: ws_headers_handler must respond to call"
+      end
+      if @options[:ws_headers] && !@options[:ws_headers].is_a?(Hash)
+        raise ArgumentError, "nats: ws_headers must be a Hash"
+      end
+      if @options[:ws_headers_handler] && @options[:ws_headers]&.any?
+        raise ArgumentError, "nats: websocket connection headers already set"
+      end
+
       NATS.send(:check_inbox_prefix!, @inbox_prefix)
     end
 
@@ -2457,7 +2468,9 @@ module NATS
         uri: @uri,
         tls: {context: tls_context, hostname: @hostname},
         connect_timeout: @options[:connect_timeout],
-        compression: @options[:compression]
+        compression: @options[:compression],
+        headers: @options[:ws_headers],
+        headers_handler: @options[:ws_headers_handler]
       )
     end
 

@@ -52,10 +52,14 @@ module NATS
       attr_accessor :socket
 
       # @param options [Hash] Those of Socket, and :compression to ask the
-      #   server to compress messages.
+      #   server to compress messages, and :headers, a Hash of HTTP headers,
+      #   or :headers_handler, a Proc that returns them, to send with the
+      #   upgrade request.
       def initialize(options = {})
         super
         @compression = options[:compression]
+        @headers = options[:headers]
+        @headers_handler = options[:headers_handler]
         @compressed = false
         @handshaked = false
         @rbuf = "".b
@@ -136,6 +140,7 @@ module NATS
           "Sec-WebSocket-Version: 13"
         ]
         request << "Sec-WebSocket-Extensions: #{PMC_REQUEST}" if @compression
+        request.concat(header_lines)
         raw_write("#{request.join("\r\n")}\r\n\r\n", @connect_timeout)
 
         status, headers = read_handshake_response
@@ -156,6 +161,27 @@ module NATS
         end
 
         @handshaked = true
+      end
+
+      # The lines of the headers of the user: those that the handler returns
+      # for this connect, or else the static ones, like nats.go. A name with
+      # an Array of values goes out once for each of them.
+      def header_lines
+        headers = @headers_handler ? @headers_handler.call : @headers
+        return [] unless headers
+
+        raise HandshakeError, "nats: websocket connection headers must be a Hash" unless headers.respond_to?(:each_pair)
+
+        headers.each_pair.flat_map do |name, values|
+          Array(values).map do |value|
+            # Nothing that would end the header line, or the request.
+            if name.to_s.empty? || name.to_s.match?(/[:\s]/) || value.to_s.match?(/[\r\n]/)
+              raise HandshakeError, "nats: invalid websocket connection header #{name.to_s.inspect}"
+            end
+
+            "#{name}: #{value}"
+          end
+        end
       end
 
       def request_path
