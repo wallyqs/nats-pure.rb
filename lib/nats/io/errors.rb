@@ -54,6 +54,10 @@ module NATS
     # When a publish while reconnecting would exceed the reconnect buffer.
     class ReconnectBufExceeded < ClientError; end
 
+    # When a connection cannot do what was asked as it is not connected to
+    # a server, like ErrDisconnected of nats.go.
+    class Disconnected < ClientError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 

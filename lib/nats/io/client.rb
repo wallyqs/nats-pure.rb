@@ -816,6 +816,25 @@ module NATS
       end
     end
 
+    # Measures the round trip time to the server: how long the server takes
+    # to answer a PING with a PONG, like RTT of nats.go.
+    # @return [Float] The round trip time, in seconds.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    # @raise [NATS::IO::Disconnected] When the connection is not connected,
+    #   as while it reconnects.
+    # @raise [NATS::Timeout] When the PONG does not come within 10 seconds.
+    def rtt
+      raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+      raise NATS::IO::Disconnected.new("nats: server is disconnected") unless connected? || draining?
+
+      start = MonotonicTime.now
+      flush(10)
+      # A close while waiting for the PONG ends the flush too.
+      raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if synchronize { closed? }
+
+      MonotonicTime.since(start)
+    end
+
     alias_method :servers, :server_pool
 
     # discovered_servers returns the NATS Servers that have been discovered
