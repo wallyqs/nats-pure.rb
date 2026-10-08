@@ -59,6 +59,11 @@ module NATS
     # TooManyStalledMsgs, unless given, like the default stall wait of nats.go.
     DEFAULT_PUB_ASYNC_STALL_WAIT = 0.2
 
+    # The options of a publish that set the id of the message and what the
+    # stream has to have, as those of a batch message.
+    EXPECT_OPTIONS = [:msg_id, :expected_last_seq, :expected_last_subject_seq, :expected_last_subject].freeze
+    private_constant :EXPECT_OPTIONS
+
     attr_reader :opts, :prefix, :nc
 
     # Create a new JetStream context for a NATS connection.
@@ -147,6 +152,20 @@ module NATS
     # @option params [Hash] :header NATS Headers to use for the message; the
     #   options below replace those that they set.
     # @option params [String] :stream Expected Stream to which the message is being published.
+    # @option params [String] :msg_id Id of the message, which the stream
+    #   stores only once within its duplicate_window, like WithMsgID of nats.go.
+    # @option params [Integer] :expected_last_seq Sequence that the last
+    #   message of the stream has to have, like WithExpectLastSequence of nats.go.
+    # @option params [Integer] :expected_last_subject_seq Sequence that the
+    #   last message on the subject has to have, 0 for none, like
+    #   WithExpectLastSequencePerSubject of nats.go.
+    # @option params [String] :expected_last_subject Subject, which can
+    #   have wildcards, whose last message expected_last_subject_seq is
+    #   checked against instead of the subject of the message, like
+    #   WithExpectLastSequenceForSubject of nats.go (requires nats-server
+    #   v2.11.0); it needs expected_last_subject_seq.
+    # @option params [String] :expected_last_msg_id Id that the last message
+    #   of the stream has to have, like WithExpectLastMsgID of nats.go.
     # @option params [Integer, Symbol] :ttl Seconds after which the stream
     #   removes the message, from 1 to 2**32, or :never to keep it past the max_age of
     #   the stream. The stream needs allow_msg_ttl (requires nats-server v2.11.0).
@@ -211,7 +230,9 @@ module NATS
     # @param subject [String] The subject from a stream where the message will be sent.
     # @param payload [String] The payload of the message.
     # @param params [Hash] Options to customize the publish, as those of
-    #   publish: :header, :stream, :ttl, :schedule, :retry_attempts and :retry_wait.
+    #   publish: :header, :stream, :msg_id, :expected_last_seq,
+    #   :expected_last_subject_seq, :expected_last_subject,
+    #   :expected_last_msg_id, :ttl, :schedule, :retry_attempts and :retry_wait.
     # @option params [Float] :timeout Seconds after which the future fails
     #   with AsyncPublishTimeout unless the message was acked, like
     #   PublishAsyncTimeout of nats.go; the :publish_async_timeout of the
@@ -686,6 +707,10 @@ module NATS
         Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
         Header::MSG_TTL => (msg_ttl(params[:ttl]) if params[:ttl])
       }.compact
+      options.merge!(BatchPublisher.msg_header(self, **params.slice(*EXPECT_OPTIONS)))
+      unless params[:expected_last_msg_id].nil?
+        options[Header::EXPECTED_LAST_MSG_ID] = BatchPublisher.option_string(:expected_last_msg_id, params[:expected_last_msg_id])
+      end
       if (schedule = params[:schedule])
         raise ArgumentError.new("nats: invalid schedule #{schedule.inspect}, expected a Hash") unless schedule.is_a?(Hash)
 
