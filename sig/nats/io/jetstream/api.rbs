@@ -13,7 +13,7 @@ module NATS
       class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time | bool | Array[NATS::JetStream::API::PriorityGroupState]]
       end
 
-      class ConsumerConfig < Struct[String | Integer | Time | Array[String]]
+      class ConsumerConfig < Struct[String | Integer | Float | Time | Array[String]]
         def to_json: (*Hash[untyped, untyped]) -> String
       end
 

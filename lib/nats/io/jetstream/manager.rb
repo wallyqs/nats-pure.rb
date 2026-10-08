@@ -45,6 +45,16 @@ module NATS
       }.freeze
       private_constant :UNSENT_STREAM_DEFAULTS
 
+      # The durations of a consumer config given in seconds, with their names
+      # for errors.
+      CONSUMER_DURATIONS = {
+        ack_wait: "ack wait",
+        inactive_threshold: "inactive threshold",
+        idle_heartbeat: "idle heartbeat",
+        priority_timeout: "priority timeout"
+      }.freeze
+      private_constant :CONSUMER_DURATIONS
+
       # add_stream creates a stream with a given config.
       # @param config [JetStream::API::StreamConfig] Configuration of the stream to create.
       # @param params [Hash] Options to customize API request.
@@ -285,11 +295,11 @@ module NATS
       # update_consumer replaces the config of an existing consumer, named by
       # the config's name or durable_name, so fields left out take their
       # defaults: pass the whole config, with the changes. The config from
-      # consumer_info lacks the settings this client does not know, and has
-      # its durations rounded down to whole seconds. A consumer that does
-      # not exist raises ConsumerDoesNotExist; the server decides which
-      # fields may change, and keeps the pause of the consumer, which
-      # pause_consumer and resume_consumer change. Requires nats-server v2.10.0.
+      # consumer_info lacks the settings this client does not know. A
+      # consumer that does not exist raises ConsumerDoesNotExist; the server
+      # decides which fields may change, and keeps the pause of the
+      # consumer, which pause_consumer and resume_consumer change. Requires
+      # nats-server v2.10.0.
       # @param stream [String] Name of the stream.
       # @param config [JetStream::API::ConsumerConfig] New configuration of the consumer.
       # @param params [Hash] Options to customize API request.
@@ -536,22 +546,10 @@ module NATS
         end
 
         config[:ack_policy] ||= JS::Config::AckExplicit
-        # Check if have to normalize ack wait so that it is in nanoseconds for Go compat.
-        if config[:ack_wait]
-          raise ArgumentError.new("nats: invalid ack wait") unless config[:ack_wait].is_a?(Integer)
-          config[:ack_wait] = config[:ack_wait] * ::NATS::NANOSECONDS
-        end
-        if config[:inactive_threshold]
-          raise ArgumentError.new("nats: invalid inactive threshold") unless config[:inactive_threshold].is_a?(Integer)
-          config[:inactive_threshold] = config[:inactive_threshold] * ::NATS::NANOSECONDS
-        end
-        if config[:idle_heartbeat]
-          raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
-          config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
-        end
-        if config[:priority_timeout]
-          raise ArgumentError.new("nats: invalid priority timeout") unless config[:priority_timeout].is_a?(Integer)
-          config[:priority_timeout] = config[:priority_timeout] * ::NATS::NANOSECONDS
+        # The durations are in seconds, Integers or Floats, and the server
+        # takes nanoseconds, as Go does.
+        CONSUMER_DURATIONS.each do |key, name|
+          config[key] = JS.nanoseconds(config[key], name) if config[key]
         end
         config[:pause_until] = rfc3339(config[:pause_until])
 

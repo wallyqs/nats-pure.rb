@@ -117,10 +117,9 @@ module NATS
           opts[:priority_groups] = opts[:priority_groups].map { |state| PriorityGroupState.new(state) } if opts[:priority_groups]
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
-          opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS if opts[:config][:ack_wait]
-          opts[:config][:inactive_threshold] = opts[:config][:inactive_threshold] / ::NATS::NANOSECONDS if opts[:config][:inactive_threshold]
-          opts[:config][:idle_heartbeat] = opts[:config][:idle_heartbeat] / ::NATS::NANOSECONDS if opts[:config][:idle_heartbeat]
-          opts[:config][:priority_timeout] = opts[:config][:priority_timeout] / ::NATS::NANOSECONDS if opts[:config][:priority_timeout]
+          %i[ack_wait inactive_threshold idle_heartbeat priority_timeout].each do |key|
+            opts[:config][key] = JS.seconds(opts[:config][key]) if opts[:config][key]
+          end
           opts[:config] = ConsumerConfig.new(opts[:config])
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
@@ -132,6 +131,13 @@ module NATS
 
       # ConsumerConfig is the consumer configuration.
       #
+      # The durations ack_wait, idle_heartbeat, inactive_threshold and
+      # priority_timeout are in seconds, Integers or Floats such as 0.5,
+      # which the server gets as exact nanoseconds. A fetched config has an
+      # Integer for a whole number of seconds, and a Float only when the
+      # server has a fraction of a second. backoff and max_expires stay in
+      # nanoseconds, both ways.
+      #
       # @!attribute durable_name
       #   @return [String]
       # @!attribute deliver_policy
@@ -140,9 +146,21 @@ module NATS
       #   @return [String]
       # @!attribute ack_wait
       #   Seconds; nil when the server omits it, as for consumers that do not ack.
-      #   @return [Integer, nil]
+      #   @return [Integer, Float, nil]
       # @!attribute max_deliver
       #   @return [Integer]
+      # @!attribute backoff
+      #   Nanoseconds to wait before each redelivery, instead of ack_wait.
+      #   @return [Array<Integer>, nil]
+      # @!attribute idle_heartbeat
+      #   Seconds between the idle heartbeats of a push consumer.
+      #   @return [Integer, Float, nil]
+      # @!attribute max_expires
+      #   Most nanoseconds a pull can wait.
+      #   @return [Integer, nil]
+      # @!attribute inactive_threshold
+      #   Seconds after which the server deletes the consumer when unused.
+      #   @return [Integer, Float, nil]
       # @!attribute replay_policy
       #   @return [String]
       # @!attribute max_waiting
@@ -169,7 +187,7 @@ module NATS
       #   With the pinned_client priority policy, seconds after which a
       #   pinned subscription that stops pulling is unpinned
       #   (requires nats-server v2.11.0).
-      #   @return [Integer, nil]
+      #   @return [Integer, Float, nil]
       ConsumerConfig = Struct.new(:name, :durable_name, :description,
         :deliver_policy, :opt_start_seq, :opt_start_time,
         :ack_policy, :ack_wait, :max_deliver, :backoff,

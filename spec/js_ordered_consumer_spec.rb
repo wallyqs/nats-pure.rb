@@ -257,7 +257,8 @@ describe "JetStream ordered consumer" do
         {deliver_policy: "bogus"},
         {deliver_policy: "by_start_sequence"},
         {deliver_policy: "by_start_time"},
-        {inactive_threshold: 1.5},
+        {inactive_threshold: 0},
+        {inactive_threshold: "5"},
         {filter_subjects: [""]},
         {max_reset_attempts: "1"}
       ].each do |params|
