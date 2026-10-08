@@ -843,6 +843,48 @@ module NATS
       servers.select { |s| s[:discovered] }
     end
 
+    # Replaces the server pool with the given URLs, like SetServerPool of
+    # nats.go. It does not reconnect: the connection stays with the current
+    # server, and the next reconnect uses the new pool. A server that is in
+    # both keeps its state, like its reconnect attempts; the current server
+    # goes last, as it does after every connect. Servers that the cluster
+    # announces still join the pool unless ignore_discovered_urls is set.
+    #
+    # @param urls [Array<String, URI>] URLs as for connect, like "nats://127.0.0.1:4222" or "127.0.0.1:4222".
+    # @raise [ArgumentError] For an invalid URL, or when it mixes websocket
+    #   and other URLs, like ErrMixingWebsocketSchemes of nats.go. The pool
+    #   is left as it was.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    def set_server_pool(urls)
+      synchronize do
+        raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+
+        uris = Array(urls).flat_map { |url| parse_server_urls(url) }
+        current = @uri || server_pool.first&.fetch(:uri) || uris.first
+        if uris.any? { |uri| %w[ws wss].include?(uri.scheme) != %w[ws wss].include?(current.scheme) }
+          raise ArgumentError, "nats: mixing of websocket and non websocket URLs is not allowed"
+        end
+
+        pool = uris.map do |uri|
+          # Keep the state of the servers that remain.
+          old = server_pool.find { |srv| same_server?(srv[:uri], uri) }
+          (old || {}).merge(uri: uri, hostname: uri.hostname, discovered: false)
+        end
+
+        # The current server goes last, as after a connect.
+        idx = pool.index { |srv| @uri && same_server?(srv[:uri], @uri) }
+        pool.push(pool.delete_at(idx)) if idx
+
+        # Like connect, have a TLS context for tls:// and wss:// URLs.
+        if !@tls && @options && pool.any? { |srv| %w[tls wss].include?(srv[:uri].scheme) }
+          @tls = @options[:tls] = {}
+        end
+        @single_url_connect_used &&= pool.all? { |srv| srv[:hostname] == @hostname }
+        @server_pool = pool
+      end
+      nil
+    end
+
     # Close connection to NATS, flushing in case connection is alive
     # and there are any pending messages, should not be used while
     # holding the lock.
@@ -2203,6 +2245,26 @@ module NATS
         # Remove padding
         encoded.gsub("=", "")
       }
+    end
+
+    # Parses a URL, or a comma separated list of them, given to
+    # set_server_pool, like connect does.
+    def parse_server_urls(url)
+      uris = url.is_a?(URI) ? [url.dup] : process_uri(url.to_s)
+      raise ArgumentError, "nats: invalid server URL #{url.inspect}" if uris.empty?
+
+      uris.each do |uri|
+        uri.port ||= DEFAULT_PORT.fetch(uri.scheme.to_sym, DEFAULT_PORT[:nats]) if uri.scheme
+        unless %w[nats tls ws wss].include?(uri.scheme) && !uri.hostname.to_s.empty? && uri.port.between?(1, 65535)
+          raise ArgumentError, "nats: invalid server URL #{url.inspect}"
+        end
+      end
+    rescue URI::Error => e
+      raise ArgumentError, "nats: invalid server URL #{url.inspect}: #{e.message}"
+    end
+
+    def same_server?(a, b)
+      a.hostname == b.hostname && a.port == b.port
     end
 
     def process_uri(uris)

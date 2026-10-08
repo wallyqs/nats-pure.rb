@@ -138,6 +138,8 @@ module NATS
 
     def discovered_servers: () -> Array[String]
 
+    def set_server_pool: (Array[String | URI::Generic]) -> nil
+
     def close: () -> void
 
     def new_inbox: () -> String
@@ -249,6 +251,10 @@ module NATS
     def can_reuse_server?: (Hash[Symbol, untyped]) -> bool
 
     def reconnect_delay: (Hash[Symbol, untyped]?) -> Float
+
+    def parse_server_urls: (String | URI::Generic) -> Array[URI::Generic]
+
+    def same_server?: (URI::Generic, URI::Generic) -> bool
 
     def should_delay_connect?: () -> bool
 
