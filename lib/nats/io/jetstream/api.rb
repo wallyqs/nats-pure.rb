@@ -147,9 +147,10 @@ module NATS
       #   True while the consumer is paused (requires nats-server v2.11.0).
       #   @return [Boolean, nil]
       # @!attribute pause_remaining
-      #   Seconds until a paused consumer resumes, rounded down, so 0 in its
-      #   last second (requires nats-server v2.11.0).
-      #   @return [Integer, nil]
+      #   Seconds until a paused consumer resumes, like PauseRemaining of
+      #   nats.go: an Integer when whole, else a Float, such as 59.75
+      #   (requires nats-server v2.11.0).
+      #   @return [Integer, Float, nil]
       # @!attribute priority_groups
       #   State of the consumer's priority groups (requires nats-server v2.11.0).
       #   @return [Array<PriorityGroupState>, nil]
@@ -162,7 +163,7 @@ module NATS
         def initialize(opts = {})
           opts[:created] = Time.parse(opts[:created])
           opts[:ts] = Time.parse(opts[:ts]) if opts[:ts]
-          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
+          opts[:pause_remaining] = JS.seconds(opts[:pause_remaining])
           opts[:priority_groups] = opts[:priority_groups].map { |state| PriorityGroupState.new(state) } if opts[:priority_groups]
           opts[:cluster] = ClusterInfo.decode(opts[:cluster])
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
@@ -281,13 +282,14 @@ module NATS
       #   @return [Time, nil] When the consumer resumes; nil once resumed. A time
       #     in the past does not pause the consumer, and paused is then false.
       # @!attribute pause_remaining
-      #   @return [Integer, nil] Seconds until the consumer resumes, rounded down,
-      #     so 0 in its last second; nil when it is not paused.
+      #   @return [Integer, Float, nil] Seconds until the consumer resumes, an
+      #     Integer when whole, else a Float, like PauseRemaining of nats.go;
+      #     nil when it is not paused.
       ConsumerPauseResponse = Struct.new(:paused, :pause_until, :pause_remaining,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:pause_until] = JS.parse_time(opts[:pause_until])
-          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
+          opts[:pause_remaining] = JS.seconds(opts[:pause_remaining])
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
