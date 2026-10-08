@@ -15,7 +15,7 @@ module NATS
     attr_accessor response: NATS::Msg?
     attr_accessor received: Integer
     attr_accessor max: Integer?
-    attr_accessor pending: untyped
+    attr_writer pending: untyped
     attr_accessor sid: Integer?
 
     attr_accessor pending_queue: Thread::SizedQueue?
@@ -28,6 +28,12 @@ module NATS
     UNLIMITED_PENDING: Integer
 
     def self.check_pending_limits!: (untyped, untyped) -> void
+
+    def valid?: () -> bool
+
+    def pending: () -> [Integer, Integer]
+
+    def queued_msgs: () -> Integer
 
     def pending_limits: () -> [Integer, Integer]
 

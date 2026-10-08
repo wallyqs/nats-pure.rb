@@ -28,7 +28,8 @@ module NATS
   class Subscription
     include MonitorMixin
 
-    attr_accessor :subject, :queue, :future, :callback, :response, :received, :max, :pending, :sid
+    attr_accessor :subject, :queue, :future, :callback, :response, :received, :max, :sid
+    attr_writer :pending
     attr_accessor :pending_queue, :pending_size, :wait_for_msgs_cond
     attr_reader :pending_msgs_limit, :pending_bytes_limit
     attr_accessor :nc
@@ -132,6 +133,32 @@ module NATS
 
     def concurrency_semaphore
       @concurrency_semaphore ||= Concurrent::Semaphore.new(@processing_concurrency)
+    end
+
+    # Whether the subscription is still active, like IsValid of nats.go:
+    # false once it was unsubscribed, got its max messages or was drained,
+    # or its connection was closed.
+    # @return [Boolean]
+    def valid?
+      !!@nc&.send(:subscribed?, self)
+    end
+
+    # The messages and bytes received for the subscription that wait to be
+    # processed by its callback or taken by next_msg, like Pending of
+    # nats.go. These are what its pending limits limit.
+    # @return [Array(Integer, Integer)] The messages and the bytes.
+    # @raise [NATS::IO::BadSubscription] When the subscription is not valid.
+    def pending
+      raise NATS::IO::BadSubscription.new("nats: invalid subscription") unless valid?
+
+      synchronize { [@pending_queue.size, @pending_size] }
+    end
+
+    # The messages that wait, like QueuedMsgs of nats.go; see pending.
+    # @return [Integer]
+    # @raise [NATS::IO::BadSubscription] When the subscription is not valid.
+    def queued_msgs
+      pending.first
     end
 
     # Sets the most messages that may be pending, also once subscribed; a
