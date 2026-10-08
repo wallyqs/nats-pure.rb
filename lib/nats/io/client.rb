@@ -1457,7 +1457,7 @@ module NATS
         if sub.future
           future = sub.future
           hdr = process_hdr(header)
-          sub.response = Msg.new(subject: subject, reply: reply, data: data, header: hdr, nc: self, sub: sub)
+          sub.response = received_msg(subject, reply, data, header, hdr, sub)
           future.signal
 
           return
@@ -1473,7 +1473,7 @@ module NATS
 
             # Only dispatch message when sure that it would not block
             # the main read loop from the parser.
-            msg = Msg.new(subject: subject, reply: reply, data: data, header: hdr, nc: self, sub: sub)
+            msg = received_msg(subject, reply, data, header, hdr, sub)
 
             sub.dispatch(msg)
           end
@@ -1489,6 +1489,14 @@ module NATS
           err_cb_call(self, err, sub) if @err_cb
         end
       end
+    end
+
+    # A message received for a subscription, which knows its size as it
+    # came, like nats.go.
+    def received_msg(subject, reply, data, raw_header, header, sub)
+      msg = Msg.new(subject: subject, reply: reply, data: data, header: header, nc: self, sub: sub)
+      msg.send(:wire_size=, subject.bytesize + reply.to_s.bytesize + raw_header.to_s.bytesize + data.bytesize)
+      msg
     end
 
     def select_next_server

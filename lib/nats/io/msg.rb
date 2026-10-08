@@ -56,6 +56,39 @@ module NATS
       # JS related
       @ackd = false
       @meta = nil
+
+      # The size of a received message as it came, see size.
+      @wire_size = nil
+    end
+
+    # Whether msg has the same subject, reply, header and data, like Equal
+    # of nats.go; the connection and the subscription are not compared. A
+    # nil reply, header or data is the same as an empty one, and a header
+    # value String the same as an Array of just that value.
+    # @param other [Object] The message to compare with.
+    # @return [Boolean]
+    def ==(other)
+      return true if equal?(other)
+      return false unless other.is_a?(NATS::Msg)
+
+      @subject.to_s == other.subject.to_s && @reply.to_s == other.reply.to_s &&
+        @data.to_s.b == other.data.to_s.b && header_values == other.send(:header_values)
+    end
+    alias_method :eql?, :==
+
+    def hash
+      [NATS::Msg, @subject.to_s, @reply.to_s, @data.to_s.b, header_values].hash
+    end
+
+    # The size of the message in bytes, like Size of nats.go: those of its
+    # subject, reply, header and data, as the server counts them against
+    # the max_bytes of a pull. That of a received message is that of the
+    # message as it came.
+    # @return [Integer]
+    def size
+      return @wire_size if @wire_size
+
+      @subject.to_s.bytesize + @reply.to_s.bytesize + header_bytesize + @data.to_s.bytesize
     end
 
     def respond(data = "")
@@ -80,6 +113,28 @@ module NATS
       dot = "..." if @data.length > 10
       dat = "#{data.slice(0, 10)}#{dot}"
       "#<NATS::Msg(subject: \"#{@subject}\", reply: \"#{@reply}\", data: #{dat.inspect}#{hdr})>"
+    end
+
+    private
+
+    # Called by the client with the size of a received message.
+    attr_writer :wire_size
+
+    # The header, its names and values as Strings, each name with an Array
+    # of its values.
+    def header_values
+      return {} unless @header
+
+      @header.each_with_object({}) do |(key, value), values|
+        values[key.to_s] = Array(value).map(&:to_s)
+      end
+    end
+
+    # The size of the header as it is published.
+    def header_bytesize
+      return 0 if @header.nil? || @header.empty?
+
+      NATS::Client::NATS_HDR_LINE.bytesize + Msg.header_lines(@header).sum(&:bytesize) + NATS::Client::CR_LF_SIZE
     end
   end
 end
