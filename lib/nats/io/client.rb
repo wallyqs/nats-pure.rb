@@ -1467,8 +1467,12 @@ module NATS
         @last_err = server_error_for(err, current && current[:auth_required])
 
         # We cannot recover from auth errors so mark it to avoid
-        # retrying to unecessarily next time.
-        current[:error_received] = true if current && @last_err.is_a?(NATS::IO::AuthError)
+        # retrying to unecessarily next time, unless asked to keep trying
+        # like IgnoreAuthErrorAbort of nats.go, as when the credentials
+        # given by a handler may change.
+        if current && @last_err.is_a?(NATS::IO::AuthError) && !@options[:ignore_auth_error_abort]
+          current[:error_received] = true
+        end
 
         # Like nats.go, the connection stays up after a permissions
         # violation or when a subscription is refused, so only dispatch the
