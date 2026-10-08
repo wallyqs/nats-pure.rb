@@ -153,7 +153,8 @@ module NATS
     PING_REQUEST = "PING#{CR_LF}".freeze
     PONG_RESPONSE = "PONG#{CR_LF}".freeze
 
-    NATS_HDR_LINE = "NATS/1.0#{CR_LF}".freeze
+    NATS_HDR_VERSION = "NATS/1.0"
+    NATS_HDR_LINE = "#{NATS_HDR_VERSION}#{CR_LF}".freeze
     STATUS_MSG_LEN = 3
     STATUS_HDR = "Status"
     DESC_HDR = "Description"
@@ -582,7 +583,7 @@ module NATS
 
     # Publishes a NATS::Msg that may include headers.
     def publish_msg(msg)
-      raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
+      raise NATS::IO::InvalidMsg, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
       raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
       if msg.header && !@server_info.empty? && !@server_info[:headers]
         raise NATS::IO::HeadersNotSupported.new("nats: headers not supported by this server")
@@ -727,7 +728,7 @@ module NATS
 
     # request_msg makes a NATS request using a NATS::Msg that may include headers.
     def request_msg(msg, **opts)
-      raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
+      raise NATS::IO::InvalidMsg, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
       raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
 
       token = nil
@@ -1374,35 +1375,40 @@ module NATS
       @server_info
     end
 
+    # Decodes the header of a received message.
+    # @raise [NATS::IO::BadHeaderMsg] When it cannot be decoded, like
+    #   DecodeHeadersMsg of nats.go: it does not start with NATS/1.0, has
+    #   an inline status shorter than 3 characters, or a line without ':'.
     def process_hdr(header)
       hdr = nil
       if header
         hdr = {}
         lines = header.lines
+        status_hdr = lines.first.to_s.rstrip
+        inline = status_hdr.delete_prefix(NATS_HDR_VERSION).strip
+        if !status_hdr.start_with?(NATS_HDR_VERSION) || (!inline.empty? && inline.size < STATUS_MSG_LEN)
+          raise NATS::IO::BadHeaderMsg.new("nats: message could not decode headers")
+        end
 
         # Check if the first line has an inline status and description.
-        if lines.count > 0
-          status_hdr = lines.first.rstrip
-          status = status_hdr.slice(NATS_HDR_LINE_SIZE - 1, STATUS_MSG_LEN)
+        status = status_hdr.slice(NATS_HDR_LINE_SIZE - 1, STATUS_MSG_LEN)
+        if status && !status.empty?
+          hdr[STATUS_HDR] = status
 
-          if status && !status.empty?
-            hdr[STATUS_HDR] = status
-
-            if NATS_HDR_LINE_SIZE + 2 < status_hdr.bytesize
-              desc = status_hdr.slice(NATS_HDR_LINE_SIZE + STATUS_MSG_LEN, status_hdr.bytesize)
-              hdr[DESC_HDR] = desc unless desc.empty?
-            end
+          if NATS_HDR_LINE_SIZE + 2 < status_hdr.bytesize
+            desc = status_hdr.slice(NATS_HDR_LINE_SIZE + STATUS_MSG_LEN, status_hdr.bytesize)
+            hdr[DESC_HDR] = desc unless desc.empty?
           end
         end
-        begin
-          lines.slice(1, header.size).each do |line|
-            line.rstrip!
-            next if line.empty?
-            key, value = line.strip.split(/\s*:\s*/, 2)
-            Msg.add_header_value(hdr, key, value)
-          end
-        rescue => e
-          e
+
+        lines.drop(1).each do |line|
+          line = line.strip
+          next if line.empty?
+          raise NATS::IO::BadHeaderMsg.new("nats: message could not decode headers") unless line.include?(":")
+
+          key, value = line.split(/\s*:\s*/, 2)
+          # Like nats.go, a line without a name is skipped.
+          Msg.add_header_value(hdr, key, value) unless key.empty?
         end
       end
 
@@ -1474,6 +1480,18 @@ module NATS
       synchronize { sub = @subs[sid] }
       return unless sub
 
+      # Like nats.go, a message whose header cannot be decoded comes
+      # without it, and the error goes to on_error.
+      hdr = nil
+      begin
+        hdr = process_hdr(header)
+      rescue NATS::IO::BadHeaderMsg => e
+        synchronize do
+          @last_err = e
+          err_cb_call(self, e, sub) if @err_cb
+        end
+      end
+
       err = nil
       sub.synchronize do
         sub.received += 1
@@ -1496,7 +1514,6 @@ module NATS
         # do so here already while holding the lock and return
         if sub.future
           future = sub.future
-          hdr = process_hdr(header)
           sub.response = received_msg(subject, reply, data, header, hdr, sub)
           future.signal
 
@@ -1508,8 +1525,6 @@ module NATS
             err = NATS::IO::SlowConsumer.new("nats: slow consumer, messages dropped")
             sub.send(:dropped!)
           else
-            hdr = process_hdr(header)
-
             # Only dispatch message when sure that it would not block
             # the main read loop from the parser.
             msg = received_msg(subject, reply, data, header, hdr, sub)

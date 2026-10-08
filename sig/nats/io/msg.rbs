@@ -25,6 +25,8 @@ module NATS
 
     private
 
+    def check_respond!: () -> void
+
     attr_writer wire_size: Integer?
 
     def header_values: () -> Hash[String, Array[String]]

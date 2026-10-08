@@ -240,8 +240,16 @@ module NATS
     end
 
     # next_msg blocks and waiting for the next message to be received.
+    # The messages already received are returned first, and then, like
+    # NextMsg of nats.go, it raises when no more can come.
     # @raise [NATS::IO::SyncSubRequired] For a subscription with a callback,
     #   whose messages go to the callback, like ErrSyncSubRequired of nats.go.
+    # @raise [NATS::IO::MaxMessages] When the subscription got its max
+    #   messages, like ErrMaxMessages.
+    # @raise [NATS::IO::BadSubscription] When it was unsubscribed or drained,
+    #   like ErrBadSubscription.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    # @raise [NATS::Timeout] When no message comes within the timeout.
     def next_msg(opts = {})
       unless wait_for_msgs_cond
         raise NATS::IO::SyncSubRequired.new("nats: illegal call on an async subscription")
@@ -250,12 +258,17 @@ module NATS
       timeout = opts[:timeout] ||= 0.5
       synchronize do
         if @pending_queue.empty?
+          check_next_msg!
+
           # Wait for a bit until getting a signal.
           MonotonicTime.with_nats_timeout(timeout) do
             wait_for_msgs_cond.wait(timeout)
           end
 
-          raise NATS::Timeout if @pending_queue.empty?
+          if @pending_queue.empty?
+            check_next_msg!
+            raise NATS::Timeout
+          end
         end
 
         # Decrease pending size since consumed already
@@ -352,6 +365,17 @@ module NATS
         (@pending_bytes_limit.positive? && @pending_size >= @pending_bytes_limit)
     end
 
+    # Raises when no more messages can come for next_msg. The lock is held.
+    def check_next_msg!
+      raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if @nc.closed?
+      if @max
+        raise NATS::IO::MaxMessages.new("nats: maximum messages delivered") if @received >= @max
+        # Unsubscribed with a max that was not reached, unless drained.
+        return unless @drained
+      end
+      raise NATS::IO::BadSubscription.new("nats: invalid subscription") if @closed
+    end
+
     # Called by the client for a message it dropped. The lock is held.
     def dropped!
       @dropped += 1
@@ -367,6 +391,8 @@ module NATS
     # unless told not to wait, as when the connection is closed.
     def closed!(wait: true)
       handler = synchronize do
+        # Wakes up next_msg, as no more messages come.
+        wait_for_msgs_cond&.broadcast
         next unless callback
 
         @closed_cb.tap { @closed_cb = nil }

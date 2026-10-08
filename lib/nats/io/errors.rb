@@ -62,6 +62,19 @@ module NATS
     # ErrSyncSubRequired of nats.go.
     class SyncSubRequired < ClientError; end
 
+    # When the header of a received message cannot be decoded, like
+    # ErrBadHeaderMsg of nats.go. The message is still delivered, without
+    # its header, and the error goes to on_error.
+    class BadHeaderMsg < ClientError; end
+
+    # When responding to a message that came from no connection, like
+    # ErrMsgNotBound of nats.go.
+    class MsgNotBound < ClientError; end
+
+    # When something other than a NATS::Msg is published as one, like
+    # ErrInvalidMsg of nats.go. A TypeError, as it was.
+    class InvalidMsg < TypeError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 
@@ -113,9 +126,17 @@ module NATS
     # When we use an invalid subject.
     class BadSubject < Error; end
 
+    # When responding to a message that has no reply subject, like
+    # ErrMsgNoReply of nats.go.
+    class MsgNoReply < BadSubject; end
+
     # When an invalid subscription is used, like one already unsubscribed
     # or when the NATS connection is already closed.
     class BadSubscription < Error; end
+
+    # When next_msg is called on a subscription that got its max messages,
+    # and they were all taken, like ErrMaxMessages of nats.go.
+    class MaxMessages < BadSubscription; end
 
     # When a subscription hits the pending messages limit.
     class SlowConsumer < Error; end
