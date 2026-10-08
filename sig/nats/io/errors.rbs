@@ -9,6 +9,9 @@ module NATS
     class ClientError < NATS::IO::Error
     end
 
+    class ReconnectBufExceeded < NATS::IO::ClientError
+    end
+
     class ConnectError < NATS::IO::Error
     end
 

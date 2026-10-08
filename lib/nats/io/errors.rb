@@ -24,6 +24,9 @@ module NATS
     # When we detect error on the client side.
     class ClientError < Error; end
 
+    # When a publish while reconnecting would exceed the reconnect buffer.
+    class ReconnectBufExceeded < ClientError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 
