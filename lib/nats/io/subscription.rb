@@ -173,7 +173,13 @@ module NATS
     end
 
     # next_msg blocks and waiting for the next message to be received.
+    # @raise [NATS::IO::SyncSubRequired] For a subscription with a callback,
+    #   whose messages go to the callback, like ErrSyncSubRequired of nats.go.
     def next_msg(opts = {})
+      unless wait_for_msgs_cond
+        raise NATS::IO::SyncSubRequired.new("nats: illegal call on an async subscription")
+      end
+
       timeout = opts[:timeout] ||= 0.5
       synchronize do
         if @pending_queue.empty?
