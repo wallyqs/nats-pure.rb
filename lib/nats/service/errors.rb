@@ -12,6 +12,10 @@ module NATS
 
     class InvalidSubjectError < Error; end
 
+    # When respond_json cannot generate its response as JSON, like
+    # ErrMarshalResponse of nats.go micro.
+    class MarshalResponseError < Error; end
+
     # NATSError is passed to the error handler of a service when one of the
     # service's subscriptions reports an asynchronous error, like a slow
     # consumer or a NATS error raised in an endpoint handler, like the

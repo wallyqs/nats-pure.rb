@@ -3,6 +3,9 @@ module NATS
     class Error < StandardError
     end
 
+    class MarshalResponseError < NATS::Service::Error
+    end
+
     class NATSError < NATS::Service::Error
       attr_reader subject: String
       attr_reader description: String

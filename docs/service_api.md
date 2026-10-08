@@ -76,6 +76,18 @@ client.request("hi")
 # Hi!
 ```
 
+`respond_json` responds with an object as JSON. An object that cannot be generated as JSON,
+like a NaN Float, raises `NATS::Service::MarshalResponseError`, and nothing is sent:
+
+```ruby
+service.endpoints.add("hi") do |message|
+  message.respond_json({greeting: "Hi!"})
+end
+
+client.request("hi")
+# {"greeting":"Hi!"}
+```
+
 You can also create multiple endpoints:
 
 ```ruby

@@ -24,6 +24,21 @@ module NATS
         @error = nil
       end
 
+      # Responds with obj as JSON, like RespondJSON of nats.go micro.
+      #
+      # @param obj [Object] The response, generated with JSON.generate.
+      # @raise [NATS::Service::MarshalResponseError] When obj cannot be
+      #   generated as JSON, as for a NaN Float. Nothing is sent then.
+      def respond_json(obj)
+        json = begin
+          JSON.generate(obj)
+        rescue => e
+          raise MarshalResponseError, "marshaling response: #{e.message}"
+        end
+
+        respond(json)
+      end
+
       def respond_with_error(error)
         @error = NATS::Service::ErrorWrapper.new(error)
 
