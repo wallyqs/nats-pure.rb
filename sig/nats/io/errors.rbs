@@ -27,6 +27,12 @@ module NATS
     class Disconnected < NATS::IO::ClientError
     end
 
+    class ClientIDNotSupported < NATS::IO::ClientError
+    end
+
+    class ClientIPNotSupported < NATS::IO::ClientError
+    end
+
     class ConnectionNotTLS < NATS::IO::ClientError
     end
 

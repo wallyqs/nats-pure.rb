@@ -44,7 +44,7 @@ describe "Client - connection introspection" do
     expect(nc.connected_cluster_name).to be_nil
     expect(nc.client_id).to be_a(Integer)
     expect(nc.client_id).to be > 0
-    expect(nc.client_ip).to eql("127.0.0.1")
+    expect(nc.client_ip).to eql(IPAddr.new("127.0.0.1"))
     expect(nc.max_payload).to eql(1024 * 1024)
     expect(nc.headers_supported?).to be(true)
     expect(nc.auth_required?).to be(false)

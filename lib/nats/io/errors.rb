@@ -58,6 +58,14 @@ module NATS
     # a server, like ErrDisconnected of nats.go.
     class Disconnected < ClientError; end
 
+    # When the server does not tell the id of the connection, like
+    # ErrClientIDNotSupported of nats.go.
+    class ClientIDNotSupported < ClientError; end
+
+    # When the server does not tell the IP address of the connection, like
+    # ErrClientIPNotSupported of nats.go.
+    class ClientIPNotSupported < ClientError; end
+
     # When asking for the TLS state of a connection that does not use TLS,
     # like ErrConnectionNotTLS of nats.go.
     class ConnectionNotTLS < ClientError; end

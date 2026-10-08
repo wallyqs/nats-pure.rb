@@ -26,6 +26,7 @@ require "socket"
 require "json"
 require "monitor"
 require "uri"
+require "ipaddr"
 require "securerandom"
 require "concurrent"
 
@@ -1097,18 +1098,33 @@ module NATS
 
     # The id that the server gave the connection, like GetClientID of
     # nats.go. It may change when the connection reconnects.
-    # @return [Integer, nil] nil when the server does not tell it.
+    # @return [Integer]
+    # @raise [NATS::IO::ClientIDNotSupported] When the server does not
+    #   tell it, as before it connected.
     # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
     def client_id
-      server_info_unless_closed(:client_id)
+      id = server_info_unless_closed(:client_id)
+      raise NATS::IO::ClientIDNotSupported.new("nats: client ID not supported by this server") if id.nil? || id == 0
+
+      id
     end
 
     # The IP address of the connection as the server sees it, like
     # GetClientIP of nats.go.
-    # @return [String, nil] nil when the server does not tell it.
+    # @return [IPAddr, nil] nil when the server tells an address that is
+    #   not one, as net.ParseIP of nats.go does.
+    # @raise [NATS::IO::ClientIPNotSupported] When the server does not
+    #   tell it, as before it connected.
     # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
     def client_ip
-      server_info_unless_closed(:client_ip)
+      ip = server_info_unless_closed(:client_ip)
+      raise NATS::IO::ClientIPNotSupported.new("nats: client IP not supported by this server") if ip.nil? || ip.empty?
+
+      begin
+        IPAddr.new(ip)
+      rescue IPAddr::InvalidAddressError
+        nil
+      end
     end
 
     # The largest message, in bytes, that the server takes, like MaxPayload of nats.go.
