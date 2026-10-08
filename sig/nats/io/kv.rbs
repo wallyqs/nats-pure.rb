@@ -59,7 +59,33 @@ module NATS
 
     def status: () -> NATS::KeyValue::BucketStatus
 
+    def keys: (?(Hash[Symbol, untyped] | Array[String] | String)) ?{ (String) -> void } -> untyped
+
+    def list_keys: (?Hash[Symbol, untyped]) -> NATS::KeyLister
+
+    def list_keys_filtered: (*(String | Array[String]), **untyped) -> NATS::KeyLister
+
     class Entry < Struct[untyped]
     end
+  end
+
+  class KeyLister
+    include Enumerable[String]
+
+    @watcher: untyped
+    @updates: Thread::SizedQueue
+    @mon: Monitor
+    @stopped: bool
+
+    def initialize: (untyped) -> void
+
+    def each: () { (String) -> void } -> self
+            | () -> Enumerator[String, self]
+
+    alias keys each
+
+    def stop: () -> nil
+
+    def stopped?: () -> bool
   end
 end
