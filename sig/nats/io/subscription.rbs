@@ -73,12 +73,17 @@ module NATS
     @max_pending_msgs: Integer
     @max_pending_bytes: Integer
     @closed_cb: Proc?
+    @permission_error: NATS::IO::PermissionViolation?
 
     def check_next_msg!: () -> void
 
     def pending_queue_max: () -> Integer
 
     def pending_limits_reached?: () -> bool
+
+    attr_reader permission_error: NATS::IO::PermissionViolation?
+
+    def permission_error!: (NATS::IO::PermissionViolation?) -> void
 
     def dropped!: () -> Integer
 

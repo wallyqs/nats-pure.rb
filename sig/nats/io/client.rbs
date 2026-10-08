@@ -274,6 +274,8 @@ module NATS
 
     def process_err: (String) -> void
 
+    def denied_subscriptions: (NATS::IO::PermissionViolation) -> Array[NATS::Subscription]
+
     def server_error_for: (String, bool?) -> NATS::IO::Error
 
     def current_server: () -> Hash[Symbol, untyped]?

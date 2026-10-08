@@ -116,6 +116,10 @@ module NATS
       # Called with the subject once the subscription is closed.
       @closed_cb = nil
 
+      # The permissions violation of the server that refused the
+      # subscription, with permission_err_on_subscribe.
+      @permission_error = nil
+
       # To limit number of concurrent messages being processed (1 to only allow sequential processing)
       @processing_concurrency = opts.fetch(:processing_concurrency, NATS::IO::DEFAULT_SINGLE_SUB_CONCURRENCY)
     end
@@ -275,6 +279,9 @@ module NATS
     #   messages, like ErrMaxMessages.
     # @raise [NATS::IO::BadSubscription] When it was unsubscribed or drained,
     #   like ErrBadSubscription.
+    # @raise [NATS::IO::PermissionViolation] With the permission_err_on_subscribe
+    #   option of the connection, when the server refused the subscription, as
+    #   its permissions do not allow it, until the connection reconnects.
     # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
     # @raise [NATS::Timeout] When no message comes within the timeout.
     def next_msg(opts = {})
@@ -395,12 +402,26 @@ module NATS
     # Raises when no more messages can come for next_msg. The lock is held.
     def check_next_msg!
       raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if @nc.closed?
+      raise @permission_error.class.new(@permission_error.message) if @permission_error
       if @max
         raise NATS::IO::MaxMessages.new("nats: maximum messages delivered") if @received >= @max
         # Unsubscribed with a max that was not reached, unless drained.
         return unless @drained
       end
       raise NATS::IO::BadSubscription.new("nats: invalid subscription") if @closed
+    end
+
+    attr_reader :permission_error
+
+    # Called by the client when the server refused the subscription, with
+    # the error, or with nil when it subscribes again on a reconnect. Wakes
+    # up next_msg, which raises it. Not under the lock, which the client
+    # may hold for itself.
+    def permission_error!(err)
+      @permission_error = err
+      return unless err
+
+      synchronize { wait_for_msgs_cond&.broadcast }
     end
 
     # Called by the client for a message it dropped. The lock is held.
