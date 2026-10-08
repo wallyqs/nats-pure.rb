@@ -66,15 +66,48 @@ module NATS
       end
 
       # stream_info retrieves the current status of a stream.
+      #
+      # With :subjects_filter, the state of the info has the number of
+      # messages of each subject of the stream that matches the filter, as
+      # its subjects, like WithSubjectFilter of nats.go. The server sends at
+      # most 100,000 subjects per response, so that matching more of them
+      # takes a request per 100,000, as nats.go does.
+      #
       # @param stream [String] Name of the stream.
       # @param params [Hash] Options to customize API request.
-      # @option params [Float] :timeout Time to wait for response.
+      # @option params [String] :subjects_filter Count the messages of the
+      #   subjects that match this subject, which may have wildcards, such as ">".
+      # @option params [Boolean] :deleted_details Have the state list the
+      #   sequences of the deleted messages as its deleted, like
+      #   WithDeletedDetails of nats.go.
+      # @option params [Float] :timeout Time to wait for each response.
       # @return [JetStream::API::StreamInfo] The latest StreamInfo of the stream.
       def stream_info(stream, params = {})
         raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
 
         req_subject = "#{@prefix}.STREAM.INFO.#{stream}"
-        result = api_request(req_subject, "", params)
+        req = {
+          deleted_details: (true if params[:deleted_details]),
+          subjects_filter: (params[:subjects_filter] unless params[:subjects_filter].to_s.empty?)
+        }.compact
+        # The other options, such as :header, go to the request.
+        opts = params.except(:subjects_filter, :deleted_details)
+        return JetStream::API::StreamInfo.new(api_request(req_subject, "", opts)) if req.empty?
+
+        subjects = {} if req[:subjects_filter]
+        result = nil
+        loop do
+          req[:offset] = subjects.size if subjects
+          result = api_request(req_subject, req.to_json, opts.dup)
+          break unless subjects
+
+          # The server leaves out the subjects when none match.
+          page = result.dig(:state, :subjects) || {}
+          page.each { |subject, msgs| subjects[subject.to_s] = msgs }
+          # A page that adds nothing would be requested again for good.
+          break if page.empty? || subjects.size >= result[:total].to_i
+        end
+        result[:state][:subjects] = subjects if subjects
         JetStream::API::StreamInfo.new(result)
       end
 

@@ -30,7 +30,10 @@ module NATS
       class StreamInfo < Struct[String | Hash[Symbol, untyped] | Array[Hash[Symbol, untyped]] | Time]
       end
 
-      class StreamState < Struct[Integer]
+      class StreamState < Struct[Integer | String | Array[Integer] | Hash[String, Integer] | NATS::JetStream::API::LostStreamData]
+      end
+
+      class LostStreamData < Struct[Array[Integer] | Integer]
       end
 
       class StreamCreateResponse < Struct[String | NATS::JetStream::API::StreamConfig | NATS::JetStream::API::StreamState | bool]
