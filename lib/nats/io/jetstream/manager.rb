@@ -32,7 +32,8 @@ module NATS
       # which are not sent, as nats.go does not send them either, so that
       # servers that do not know the settings take configs that leave them
       # at their defaults. Nor is discard_new_per_subject at its default,
-      # which the client did not send before it knew the setting.
+      # which the client did not send before it knew the setting, nor an
+      # empty template_owner, which newer servers do not know.
       UNSENT_STREAM_DEFAULTS = {
         discard_new_per_subject: [false],
         allow_msg_ttl: [false],
@@ -41,7 +42,8 @@ module NATS
         allow_atomic: [false],
         allow_msg_schedules: [false],
         persist_mode: ["", "default"],
-        allow_batched: [false]
+        allow_batched: [false],
+        template_owner: [""]
       }.freeze
       private_constant :UNSENT_STREAM_DEFAULTS
 
