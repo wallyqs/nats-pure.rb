@@ -650,8 +650,10 @@ module NATS
       raise NATS::IO::BadSubject.new("nats: invalid subject") if subj.empty? || subj.match?(/[ \t\r\n]/)
       raise NATS::IO::BadQueueName.new("nats: invalid queue name") if opts[:queue].to_s.match?(/[ \t\r\n]/)
 
-      opts[:pending_msgs_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
-      opts[:pending_bytes_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_BYTES_LIMIT
+      # The limits of the connection, unless given, like SubChanLen of nats.go.
+      defaults = @options || {}
+      opts[:pending_msgs_limit] ||= defaults[:sub_pending_msgs_limit] || NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
+      opts[:pending_bytes_limit] ||= defaults[:sub_pending_bytes_limit] || NATS::IO::DEFAULT_SUB_PENDING_BYTES_LIMIT
       Subscription.check_pending_limits!(opts[:pending_msgs_limit], opts[:pending_bytes_limit])
 
       sid = nil
@@ -1431,6 +1433,10 @@ module NATS
       %i[reconnect_jitter reconnect_jitter_tls].each do |opt|
         jitter = @options[opt]
         raise ArgumentError, "nats: #{opt} must be a number of seconds >= 0" unless jitter.is_a?(Numeric) && jitter >= 0
+      end
+      # The default pending limits of subscriptions, like SubChanLen of nats.go.
+      if @options[:sub_pending_msgs_limit] || @options[:sub_pending_bytes_limit]
+        Subscription.check_pending_limits!(@options[:sub_pending_msgs_limit] || 1, @options[:sub_pending_bytes_limit] || 1)
       end
       %i[custom_reconnect_delay reconnect_to_server].each do |opt|
         if @options[opt] && !@options[opt].respond_to?(:call)
