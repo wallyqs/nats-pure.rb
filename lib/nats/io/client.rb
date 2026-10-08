@@ -289,6 +289,9 @@ module NATS
       # that the connection was closed meanwhile.
       @close_generation = 0
 
+      # Whether retry_on_failed_connect retries the first connect.
+      @connect_retrying = false
+
       # New style request/response implementation.
       @resp_sub = nil
       @resp_map = nil
@@ -379,6 +382,7 @@ module NATS
         reconnects: 0
       }
       @status = DISCONNECTED
+      @connect_retrying = false
 
       # Convert URI to string if needed.
       uri = @initial_uri.dup
@@ -483,7 +487,11 @@ module NATS
       @ruby_pid = Process.pid # For fork detection
 
       srv = nil
+      # Attempts made, for retry_on_failed_connect to try each server once.
+      attempts = 0
+      initial_pool_size = server_pool.size
       begin
+        attempts += 1
         srv = select_next_server
 
         # Use the hostname from the server for TLS hostname verification.
@@ -537,6 +545,13 @@ module NATS
         # Clean up any connecting state and close connection without
         # triggering the disconnection/closed callbacks.
         close_connection(DISCONNECTED, false)
+
+        # Like RetryOnFailedConnect of nats.go, once each server failed,
+        # return and keep trying in the background.
+        if @options[:retry_on_failed_connect] && attempts >= initial_pool_size && !server_pool.empty?
+          retry_connect_in_background
+          return self
+        end
 
         # Always sleep here to safe guard against errors before current[:was_connected]
         # is set for the first time.
@@ -1988,6 +2003,31 @@ module NATS
       close
     end
 
+    # Leaves the connection reconnecting, buffering what is published and
+    # subscribed meanwhile as while reconnecting, while a thread goes on
+    # connecting, like nats.go with RetryOnFailedConnect. Once connected,
+    # on_connect is called; once out of servers, the connection closes.
+    def retry_connect_in_background
+      generation = synchronize do
+        @connect_called = true
+        @connect_retrying = true
+        @flush_queue = SizedQueue.new(NATS::IO::MAX_FLUSH_KICK_SIZE)
+        @pending_queue = SizedQueue.new(NATS::IO::MAX_PENDING_SIZE)
+        @pings_outstanding = 0
+        @pongs_received = 0
+        @pending_size = 0
+        @status = RECONNECTING
+        @close_generation
+      end
+
+      Thread.new do
+        attempt_reconnect(generation, initial: true)
+      rescue NATS::IO::NoServersError => e
+        @last_err = e
+        close
+      end
+    end
+
     def initiate_reconnect
       @status = RECONNECTING
       old_io = @io
@@ -2182,12 +2222,16 @@ module NATS
     end
 
     # Reconnect logic. generation is @close_generation from when the
-    # reconnect started; a close since then cancels the reconnect.
-    def attempt_reconnect(generation)
+    # reconnect started; a close since then cancels the reconnect. initial
+    # is for the first connect with retry_on_failed_connect, which has no
+    # disconnect to report and calls on_connect rather than on_reconnect.
+    def attempt_reconnect(generation, initial: false)
       return if closed_since?(generation)
 
-      @disconnect_cb&.call(@last_err)
-      notify_status_listeners(:disconnect)
+      unless initial
+        @disconnect_cb&.call(@last_err)
+        notify_status_listeners(:disconnect)
+      end
 
       # Clear sticky error
       @last_err = nil
@@ -2210,7 +2254,7 @@ module NATS
         # Establish TCP connection with new server
         @io = create_socket
         @io.connect
-        @stats[:reconnects] += 1
+        @stats[:reconnects] += 1 unless initial
 
         # Established TCP connection successfully so can start connect
         process_connect_init
@@ -2273,9 +2317,14 @@ module NATS
         # Now connected to NATS, and we can restart parser loop, flusher
         # and ping interval
         start_threads!
+        @connect_retrying = false
       end
 
-      @reconnect_cb&.call
+      if initial
+        async_cb_call(@connect_cb)
+      else
+        @reconnect_cb&.call
+      end
     end
 
     def closed_since?(generation)
@@ -2484,8 +2533,10 @@ module NATS
       wait
     end
 
+    # Servers that were never connected to are retried without delay,
+    # except while retry_on_failed_connect retries the first connect.
     def should_delay_connect?(server)
-      server[:was_connected] && server[:reconnect_attempts] >= 0
+      (server[:was_connected] || @connect_retrying) && server[:reconnect_attempts] >= 0
     end
 
     def should_not_reconnect?
