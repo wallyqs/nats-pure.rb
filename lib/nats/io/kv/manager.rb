@@ -28,14 +28,7 @@ module NATS
           raise BadBucketError.new("nats: bad bucket")
         end
 
-        KeyValue.new(
-          name: bucket,
-          stream: stream,
-          pre: "$KV.#{bucket}.",
-          js: self,
-          direct: si.config.allow_direct,
-          validate_keys: params[:validate_keys]
-        )
+        key_value_for(si.config, params[:validate_keys])
       end
 
       # create_key_value creates a KeyValue bucket, like CreateKeyValue of nats.go.
@@ -140,11 +133,29 @@ module NATS
           raise NATS::KeyValue::LimitMarkerTTLNotSupportedError if account_info.dig(:api, :level).to_i < 1
         end
 
+        subjects = ["$KV.#{config.bucket}.>"]
+        mirror = nil
+        sources = nil
+        if config.mirror
+          # Like nats.go, a mirror takes the keys of its origin as they are,
+          # and so has no subjects of its own.
+          mirror = key_value_source(config.mirror)
+          mirror[:name] = "KV_#{mirror[:name]}" unless mirror[:name].start_with?("KV_")
+          subjects = nil
+        elsif config.sources && !config.sources.empty?
+          sources = config.sources.map { |source| key_value_bucket_source(source, config.bucket) }
+        end
+
         JetStream::API::StreamConfig.new(
           name: "KV_#{config.bucket}",
           description: config.description,
-          subjects: ["$KV.#{config.bucket}.>"],
-          allow_direct: config.direct,
+          subjects: subjects,
+          mirror: mirror,
+          sources: sources,
+          # A mirror answers the direct gets of its origin, so it allows
+          # direct gets itself unless told otherwise.
+          allow_direct: (mirror && config.direct.nil?) ? true : config.direct,
+          mirror_direct: mirror ? true : nil,
           allow_rollup_hdrs: true,
           deny_delete: true,
           discard: "new",
@@ -166,6 +177,40 @@ module NATS
         )
       end
 
+      # key_value_source makes a stream source of a bucket's mirror or
+      # sources, turning a domain into the external API prefix of the
+      # domain, as nats.go does.
+      def key_value_source(source)
+        source = source.to_h.transform_keys(&:to_sym)
+        domain = source.delete(:domain)
+        if domain && !domain.empty?
+          raise ArgumentError.new("nats: domain and external are both set") if source[:external]
+          source[:external] = {api: "$JS.#{domain}.API"}
+        end
+        time = source[:opt_start_time]
+        source[:opt_start_time] = time.utc.iso8601(9) if time.is_a?(Time)
+        source
+      end
+
+      # key_value_bucket_source makes the stream source of a bucket that
+      # another bucket takes the keys of, mapping its keys to that bucket.
+      def key_value_bucket_source(source, bucket)
+        source = key_value_source(source)
+        # Like nats.go, a source with transforms of its own is taken as is,
+        # even one that is not a bucket.
+        transforms = source[:subject_transforms]
+        return source if transforms && !transforms.empty?
+
+        name = source[:name]
+        source_bucket = name.delete_prefix("KV_")
+        source[:name] = "KV_#{name}" unless name.start_with?("KV_")
+        # A bucket of the same name in another domain has the same keys.
+        if source[:external].nil? || source_bucket != bucket
+          source[:subject_transforms] = [{src: "$KV.#{source_bucket}.>", dest: "$KV.#{bucket}.>"}]
+        end
+        source
+      end
+
       def config_validate_keys(config)
         config.is_a?(String) ? nil : config[:validate_keys]
       end
@@ -173,10 +218,24 @@ module NATS
       # key_value_for makes the KeyValue of the bucket of a stream.
       def key_value_for(stream_config, validate_keys)
         bucket = stream_config.name.delete_prefix("KV_")
+        pre = "$KV.#{bucket}."
+        put_pre = nil
+        if (mirror = stream_config.mirror)
+          # A mirror holds the keys of its origin, to which the writes go, as
+          # in nats.go. The writes to a bucket of another domain go through
+          # the API prefix of that domain. Unlike nats.go, which looks up the
+          # keys of a mirror in the same domain under the mirror's name, and
+          # so does not find them, the reads take the origin's name too.
+          origin = mirror[:name].delete_prefix("KV_")
+          pre = "$KV.#{origin}."
+          api = mirror.dig(:external, :api)
+          put_pre = (api.nil? || api.empty?) ? pre : "#{api}.#{pre}"
+        end
         KeyValue.new(
           name: bucket,
           stream: stream_config.name,
-          pre: "$KV.#{bucket}.",
+          pre: pre,
+          put_pre: put_pre,
           js: self,
           direct: stream_config.allow_direct,
           validate_keys: validate_keys

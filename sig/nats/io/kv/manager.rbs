@@ -1,7 +1,7 @@
 module NATS
   class KeyValue
     module Manager
-      def key_value: (String) -> NATS::KeyValue
+      def key_value: (String, ?Hash[Symbol, untyped]) -> NATS::KeyValue
 
       def create_key_value: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> NATS::KeyValue
 
@@ -18,6 +18,10 @@ module NATS
       private
 
       def key_value_stream_config: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> NATS::JetStream::API::StreamConfig
+
+      def key_value_source: (Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+
+      def key_value_bucket_source: (Hash[Symbol, untyped], String) -> Hash[Symbol, untyped]
 
       def config_validate_keys: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> bool?
 
