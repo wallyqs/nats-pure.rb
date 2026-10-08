@@ -15,6 +15,7 @@
 #
 
 require_relative "errors"
+require_relative "message_batch"
 
 module NATS
   class JetStream
@@ -113,7 +114,9 @@ module NATS
       #   half the timeout. The fetch ends when it hears nothing for two of them,
       #   as when the server is gone. Not for :no_wait.
       # @yieldparam msg [NATS::Msg] Each delivery, as it comes.
-      # @return [Array<NATS::Msg>]
+      # @return [NATS::JetStream::MessageBatch] The messages, an Array, whose error
+      #   is the error that ended the fetch after some messages came, as those
+      #   raised below when none came, like MessageBatch.Error of nats.go.
       # @raise [NATS::Timeout] When a fetch that waits got no messages before its timeout.
       # @raise [ArgumentError] When the timeout is not a finite positive number, or a
       #   minimum is not an integer of at least 1.
@@ -159,7 +162,7 @@ module NATS
         end
 
         deadline = MonotonicTime.now + timeout
-        msgs = []
+        msgs = MessageBatch.new
         # Take what earlier pulls delivered first, while it fits.
         bytes_left = take_pending(msgs, batch, max_bytes, &block)
         return msgs if msgs.size == batch || bytes_left == 0 || (!msgs.empty? && MonotonicTime.now >= deadline)
@@ -287,7 +290,8 @@ module NATS
       # The pull expires at the deadline. As nats.go does, it waits up to a
       # second longer for the server to end it, so that it leaves nothing
       # behind. With a heartbeat, it ends once it hears nothing for two
-      # heartbeats before then, and raises NoHeartbeat if it got nothing.
+      # heartbeats before then, and raises NoHeartbeat if it got nothing, or
+      # gives it as the error of the batch.
       def pull_and_wait(msgs, next_req, deadline, heartbeat = nil, &block)
         reply = synchronize { "#{@subject.chomp("*")}#{@pulls += 1}" }
         synchronize { @pull_ends[reply] = nil }
@@ -305,8 +309,10 @@ module NATS
           msg
         end
         receive(msgs, next_req, pin_id, next_msg, &block)
-      rescue ::NATS::JetStream::Error::NoHeartbeat
+      rescue ::NATS::JetStream::Error::NoHeartbeat => e
         raise if msgs.empty?
+
+        msgs.error = e
       ensure
         synchronize { @pull_ends.delete(reply) }
       end
@@ -325,7 +331,9 @@ module NATS
 
       # receive collects the messages a pull delivers. It returns true once
       # the pull delivered its batch or max_bytes, or the server ended it,
-      # and false when nothing came before the deadline.
+      # and false when nothing came before the deadline. A status that ends
+      # the pull with an error raises it, or, after some messages came, is
+      # the error of the batch, like in nats.go, but for max_bytes reached.
       def receive(msgs, next_req, pin_id, next_msg, &block)
         count = 0
         bytes = 0
@@ -345,10 +353,14 @@ module NATS
           next if msg.header[JS::Header::Status] == JS::Status::CtrlMsg
 
           forget_pin(pin_id) if msg.header[JS::Header::Status] == JS::Status::PinIdMismatch
-          # An error ends the fetch too, with the messages taken before it.
-          return true if pull_ended?(msg) || !msgs.empty?
+          return true if pull_ended?(msg)
 
-          raise JS.from_msg(msg)
+          error = status_error(msg)
+          raise error if msgs.empty?
+
+          # An error ends the fetch too, with the messages taken before it.
+          msgs.error = error unless error.is_a?(::NATS::JetStream::Error::MaxBytesExceeded)
+          return true
         end
       end
 
@@ -436,6 +448,13 @@ module NATS
         return true if [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(status)
 
         status == JS::Status::Conflict && msg.header[JS::Header::Desc].to_s.downcase.include?("batch completed")
+      end
+
+      # status_error is the error that a status ending a pull stands for.
+      def status_error(msg)
+        JS.from_msg(msg)
+      rescue ::NATS::JetStream::Error::ServiceUnavailable => e
+        e
       end
 
       # pull_expires is how long a pull may wait, in nanoseconds: until the

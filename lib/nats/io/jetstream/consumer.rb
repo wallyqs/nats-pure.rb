@@ -72,7 +72,7 @@ module NATS
       # @param batch [Integer] Number of messages to pull.
       # @param params [Hash] Options of {PullSubscription#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
-      # @return [Array<NATS::Msg>]
+      # @return [NATS::JetStream::MessageBatch]
       def fetch(batch = 1, params = {}, &block)
         psub.fetch(batch, params, &block)
       end
@@ -82,7 +82,7 @@ module NATS
       # @param max_bytes [Integer] Most bytes to take.
       # @param params [Hash] Options of {PullSubscription#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
-      # @return [Array<NATS::Msg>]
+      # @return [NATS::JetStream::MessageBatch]
       def fetch_bytes(max_bytes, params = {}, &block)
         psub.fetch(MessagesContext::BYTES_ONLY_BATCH, params.merge(max_bytes: max_bytes), &block)
       end
@@ -92,7 +92,7 @@ module NATS
       # @param batch [Integer] Most messages to take.
       # @param params [Hash] Options of {PullSubscription#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
-      # @return [Array<NATS::Msg>] What the server delivered, maybe none.
+      # @return [NATS::JetStream::MessageBatch] What the server delivered, maybe none.
       def fetch_no_wait(batch = 1, params = {}, &block)
         psub.fetch(batch, params.merge(no_wait: true), &block)
       end

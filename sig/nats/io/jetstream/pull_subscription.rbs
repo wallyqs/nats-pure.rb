@@ -10,7 +10,7 @@ module NATS
 
       def next_msg: (untyped) -> void
 
-      def fetch: (Integer, Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+      def fetch: (Integer, Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> NATS::JetStream::MessageBatch
 
       def consume: (?Hash[Symbol, untyped]) { (NATS::Msg) -> void } -> NATS::JetStream::ConsumeContext
 
@@ -20,13 +20,13 @@ module NATS
 
       private
 
-      def pull_and_wait: (Array[NATS::Msg], Hash[Symbol, untyped], Float, ?Numeric?) ?{ (NATS::Msg) -> void } -> bool?
+      def pull_and_wait: (NATS::JetStream::MessageBatch, Hash[Symbol, untyped], Float, ?Numeric?) ?{ (NATS::Msg) -> void } -> bool?
 
-      def pull_pending: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
+      def pull_pending: (NATS::JetStream::MessageBatch, Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
 
-      def receive: (Array[NATS::Msg], Hash[Symbol, untyped], String?, ^() -> NATS::Msg?) ?{ (NATS::Msg) -> void } -> bool
+      def receive: (NATS::JetStream::MessageBatch, Hash[Symbol, untyped], String?, ^() -> NATS::Msg?) ?{ (NATS::Msg) -> void } -> bool
 
-      def take_pending: (Array[NATS::Msg], Integer, Integer?) ?{ (NATS::Msg) -> void } -> Integer?
+      def take_pending: (NATS::JetStream::MessageBatch, Integer, Integer?) ?{ (NATS::Msg) -> void } -> Integer?
 
       def release: (NATS::Subscription, Float) -> void
 
@@ -34,9 +34,11 @@ module NATS
 
       def keep: (NATS::Msg) -> void
 
-      def collect: (Array[NATS::Msg], NATS::Msg) ?{ (NATS::Msg) -> void } -> void
+      def collect: (NATS::JetStream::MessageBatch, NATS::Msg) ?{ (NATS::Msg) -> void } -> void
 
       def pull_ended?: (NATS::Msg) -> bool
+
+      def status_error: (NATS::Msg) -> NATS::JetStream::Error
 
       def pull_expires: (Float) -> Integer
 

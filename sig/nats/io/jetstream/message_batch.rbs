@@ -1,0 +1,7 @@
+module NATS
+  class JetStream
+    class MessageBatch < Array[NATS::Msg]
+      attr_accessor error: NATS::JetStream::Error?
+    end
+  end
+end
