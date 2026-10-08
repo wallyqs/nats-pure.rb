@@ -68,7 +68,7 @@ module NATS
           return cluster unless cluster.is_a?(Hash)
 
           info = self[cluster]
-          info[:desired] = DesiredClusterInfo[info[:desired]] if info[:desired].is_a?(Hash)
+          info[:desired] = DesiredClusterInfo.decode(info[:desired]) if info[:desired].is_a?(Hash)
           info
         end
 
@@ -83,10 +83,65 @@ module NATS
       # changing to, as the server sends it: a Hash with Symbol keys, such
       # as :created, :replicas and :status.
       class DesiredClusterInfo < Hash
+        # @!visibility private
+        def self.decode(desired)
+          info = self[desired]
+          info[:status] = DesiredClusterInfoStatus[info[:status]] if info[:status].is_a?(Hash)
+          info
+        end
+
         # @return [Time, nil] When the change started, like Created of nats.go.
         def created_time
           JS.parse_time(self[:created])
         end
+
+        # @return [DesiredClusterInfoStatus, nil] What the leader of the group
+        #   does to reach the desired cluster, or waits on (requires nats-server
+        #   v2.15.0), like Status of nats.go.
+        def status
+          self[:status]
+        end
+      end
+
+      # DesiredClusterInfoStatus is what the leader of a group that changes
+      # its cluster does, or waits on, as the server sends it: a Hash with
+      # Symbol keys, :description, :type and :err.
+      class DesiredClusterInfoStatus < Hash
+        # @return [String] A short line of what the leader does or waits on.
+        def description
+          self[:description]
+        end
+
+        # @return [String] What has to change for the migration to go on, one
+        #   of MigrationStatus, like Type of nats.go.
+        def type
+          self[:type]
+        end
+
+        # @return [String, nil] The failure behind the status, if it has one.
+        def err
+          self[:err]
+        end
+      end
+
+      # MigrationStatus has the types of DesiredClusterInfoStatus, what has to
+      # change for the migration of a stream or consumer to another cluster to
+      # go on, like MigrationStatusType of nats.go.
+      module MigrationStatus
+        # The meta leader has to record or advance the desired state.
+        META = "meta"
+        # A proposed membership change has to commit.
+        MEMBERSHIP = "membership"
+        # A snapshot has to be installed.
+        SNAPSHOT = "snapshot"
+        # More peers have to catch up before one can be removed.
+        CATCHUP = "catchup"
+        # More peers have to come online to act without losing quorum.
+        QUORUM = "quorum"
+        # Another stream or consumer has to move first.
+        BLOCKED = "blocked"
+        # There is nothing to do: the server shuts down, or the assignment is gone.
+        UNAVAILABLE = "unavailable"
       end
 
       # PriorityGroupState is the state of a priority group of a consumer
