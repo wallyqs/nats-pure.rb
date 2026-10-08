@@ -534,8 +534,8 @@ module NATS
         synchronize do
           @last_err = e
           srv[:auth_required] ||= true if @server_info[:auth_required]
-          # The server will not support no_echo on a retry either.
-          srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
+          # The server will not support no_echo, or nkeys, on a retry either.
+          srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported) || e.is_a?(NATS::IO::NkeysNotSupported)
           auth_error_abort?(srv, e)
           server_pool << srv if can_reuse_server?(srv)
         end
@@ -1389,6 +1389,11 @@ module NATS
       nkeys = %i[nkeys_seed user_nkey_cb].select { |opt| opts[opt] }
       raise ArgumentError, "nats: only one of #{nkeys.join(", ")} may be set" if nkeys.size > 1
       raise NATS::IO::NkeyAndUser, "nats: user callback and nkey defined" if users.any? && nkeys.any?
+
+      # Like nats.go, a signature handler needs something to sign for.
+      if opts[:user_signature_cb] && users.empty? && nkeys.empty?
+        raise NATS::IO::NoUserCB, "nats: user callback not defined"
+      end
 
       if !opts[:user_signature_cb]
         raise NATS::IO::UserButNoSigCB, "nats: user callback defined without a signature handler" if opts[:user_jwt_cb]
@@ -2357,6 +2362,12 @@ module NATS
         raise NATS::IO::NoInfoReceived.new("nats: protocol exception, INFO not valid")
       end
 
+      # Like nats.go, an nkey needs a nonce to sign, which servers that do
+      # not take nkeys do not send.
+      if @user_nkey_cb && @server_info[:nonce].to_s.empty?
+        raise NATS::IO::NkeysNotSupported.new("nats: nkeys not supported by the server")
+      end
+
       if server_using_secure_connection? && client_using_secure_connection?
         @io.setup_tls! unless @options[:tls_handshake_first]
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
@@ -2456,7 +2467,7 @@ module NATS
         # In case there was an error from the server check
         # to see whether need to take it out from rotation
         srv[:auth_required] ||= true if @server_info[:auth_required]
-        srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
+        srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported) || e.is_a?(NATS::IO::NkeysNotSupported)
         abort = synchronize { auth_error_abort?(srv, e) }
         server_pool << srv if can_reuse_server?(srv)
 
