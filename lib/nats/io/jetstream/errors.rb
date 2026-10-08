@@ -300,6 +300,11 @@ module NATS
       # different configuration.
       class ConsumerAlreadyExists < BadRequest; end
 
+      # When a durable push consumer is created again while it is still
+      # active, as when another subscription is bound to it; the err_code
+      # 10105 that nats.go names JSErrCodeConsumerAlreadyExists.
+      class ConsumerExistingActive < BadRequest; end
+
       # When update_consumer finds no consumer to update. The server reports
       # it as a bad request, so unlike ConsumerNotFound it is not NotFound.
       class ConsumerDoesNotExist < BadRequest; end
