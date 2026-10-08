@@ -76,6 +76,9 @@ module NATS
     @close_cp: Proc
     @disconnect_cb: Proc
     @reconnect_cb: Proc
+    @connect_cb: Proc?
+    @discovered_servers_cb: Proc?
+    @lame_duck_mode_cb: Proc?
 
     @tls: bool?
 
@@ -153,6 +156,12 @@ module NATS
 
     def on_close: () { () -> void } -> void
 
+    def on_connect: () { () -> void } -> void
+
+    def on_discovered_servers: () { () -> void } -> void
+
+    def on_lame_duck_mode: () { () -> void } -> void
+
     def last_error: () -> untyped
 
     def drain: () -> void
@@ -200,6 +209,8 @@ module NATS
     def send_flush_queue: (Symbol) -> void
 
     def delete_sid: (Symbol) -> void
+
+    def async_cb_call: (Proc?) -> void
 
     def err_cb_call: (self, untyped, NATS::Subscription) -> void
 

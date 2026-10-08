@@ -209,6 +209,9 @@ module NATS
       @close_cb = proc {}
       @disconnect_cb = proc {}
       @reconnect_cb = proc {}
+      @connect_cb = nil
+      @discovered_servers_cb = nil
+      @lame_duck_mode_cb = nil
 
       # Secure TLS options
       @tls = nil
@@ -491,6 +494,9 @@ module NATS
 
       # Connected to NATS so Ready to start parser loop, flusher and ping interval
       start_threads!
+
+      # Called before connect returns, like ConnectedCB of nats.go.
+      async_cb_call(@connect_cb)
 
       self
     end
@@ -858,6 +864,28 @@ module NATS
       @close_cb = callback
     end
 
+    # Sets the callback called when a connection to NATS is established for
+    # the first time, before connect returns, like ConnectedCB of nats.go.
+    # Reconnects call on_reconnect instead.
+    def on_connect(&callback)
+      @connect_cb = callback
+    end
+
+    # Sets the callback called when the server announces servers of its
+    # cluster that the client did not know of, which join the server pool,
+    # like DiscoveredServersCB of nats.go. Not called for those announced
+    # when first connecting.
+    def on_discovered_servers(&callback)
+      @discovered_servers_cb = callback
+    end
+
+    # Sets the callback called when the server notifies that it entered lame
+    # duck mode and will soon close its connections, so that the client can
+    # move elsewhere before it does, like LameDuckModeHandler of nats.go.
+    def on_lame_duck_mode(&callback)
+      @lame_duck_mode_cb = callback
+    end
+
     def last_error
       synchronize do
         @last_err
@@ -962,6 +990,7 @@ module NATS
 
     def process_info(line)
       parsed_info = JSON.parse(line)
+      discovered = false
 
       # INFO can be received asynchronously too,
       # so has to be done under the lock.
@@ -1007,7 +1036,14 @@ module NATS
 
           # Include in server pool but keep current one as the first one.
           server_pool.push(*srvs)
+          discovered = srvs.any?
         end
+      end
+
+      # Like nats.go, not when first connecting.
+      unless connecting?
+        async_cb_call(@discovered_servers_cb) if discovered
+        async_cb_call(@lame_duck_mode_cb) if @server_info[:ldm]
       end
 
       @server_info
@@ -1344,6 +1380,14 @@ module NATS
 
     def delete_sid(sid)
       @subs.delete(sid)
+    end
+
+    # Calls a connection event callback, handing what it raises to on_error,
+    # so that it does not break the thread that calls it.
+    def async_cb_call(cb)
+      cb&.call
+    rescue => e
+      err_cb_call(self, e, nil)
     end
 
     def err_cb_call(nc, e, sub)
