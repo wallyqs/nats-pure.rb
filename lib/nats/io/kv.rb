@@ -26,6 +26,28 @@ module NATS
     KV_OP = "KV-Operation"
     KV_DEL = "DEL"
     KV_PURGE = "PURGE"
+    # The operation of the entries of puts, which, unlike deletes and
+    # purges, carry no KV-Operation header.
+    KV_PUT = "PUT"
+
+    # The operations of entries, like KeyValueOp of nats.go. The operation
+    # of an Entry is one of these Strings, which are those of KV_PUT, KV_DEL
+    # and KV_PURGE.
+    module Operation
+      # Like KeyValuePut of nats.go.
+      PUT = KV_PUT
+      # Like KeyValueDelete of nats.go.
+      DELETE = KV_DEL
+      # Like KeyValuePurge of nats.go.
+      PURGE = KV_PURGE
+    end
+
+    # The keys pattern that watches all keys, like AllKeys of nats.go.
+    ALL_KEYS = ">"
+    # The most revisions of a key that a bucket keeps, like
+    # KeyValueMaxHistory of nats.go.
+    KEY_VALUE_MAX_HISTORY = 64
+
     MSG_ROLLUP_SUBJECT = "sub"
     MSG_ROLLUP_ALL = "all"
     ROLLUP = "Nats-Rollup"
@@ -61,7 +83,8 @@ module NATS
       # operation_of returns the operation of an entry from the headers of
       # its message: KV_DEL or KV_PURGE for the markers of deletes and purges,
       # including those that the server leaves when a TTL removes a key,
-      # the KV-Operation header of other messages, or nil.
+      # the KV-Operation header of other messages, or nil for a put, whose
+      # entry has the KV_PUT operation.
       def operation_of(header)
         return if header.nil?
 
@@ -87,7 +110,12 @@ module NATS
       @validate_keys = opts[:validate_keys]
     end
 
-    # get returns the latest value for the key.
+    # get returns the latest value for the key, as an Entry with the
+    # revision, the time it was stored (created) and the KV_PUT operation.
+    # @param params [Hash] Options of the get.
+    # @option params [Integer] :revision Get this revision of the key, like
+    #   GetRevision of nats.go.
+    # @raise [KeyNotFoundError] When the key does not exist or was deleted.
     def get(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       entry = nil
@@ -115,7 +143,10 @@ module NATS
           direct: @direct)
       end
 
-      entry = Entry.new(bucket: @name, key: key, value: msg.data, revision: msg.seq)
+      op = KeyValue.operation_of(msg.headers)
+      # Direct gets have the sequence in a header, as a String.
+      entry = Entry.new(bucket: @name, key: key, value: msg.data, revision: msg.seq.to_i,
+        created: msg.time, operation: op || KV_PUT)
 
       if subject != msg.subject
         raise KeyNotFoundError.new(
@@ -124,7 +155,6 @@ module NATS
         )
       end
 
-      op = KeyValue.operation_of(msg.headers)
       if (op == KV_DEL) || (op == KV_PURGE)
         raise KeyDeletedError.new(entry: entry, op: op)
       end
@@ -284,6 +314,22 @@ module NATS
       BucketStatus.new(info, @name)
     end
 
+    # Entry is a revision of a key, like KeyValueEntry of nats.go.
+    #
+    # @!attribute revision
+    #   The sequence of the revision in the bucket's stream.
+    #   @return [Integer]
+    # @!attribute delta
+    #   How many revisions a watcher has yet to get after this one, nil
+    #   from get.
+    #   @return [Integer, nil]
+    # @!attribute created
+    #   When the bucket stored the revision.
+    #   @return [Time]
+    # @!attribute operation
+    #   What made the revision: Operation::PUT ("PUT"), Operation::DELETE
+    #   ("DEL") or Operation::PURGE ("PURGE").
+    #   @return [String]
     Entry = Struct.new(:bucket, :key, :value, :revision, :delta, :created, :operation, keyword_init: true) do
       def initialize(opts = {})
         rem = opts.keys - members
@@ -294,7 +340,7 @@ module NATS
 
     # watch will be signaled when any key is updated.
     def watchall(params = {})
-      watch(">", params)
+      watch(ALL_KEYS, params)
     end
 
     # keys returns the keys from a KeyValue store.
@@ -361,7 +407,7 @@ module NATS
       params[:idle_heartbeat] ||= 5 # seconds
       params[:inactive_threshold] ||= 5 * 60 # 5 minutes
       subject = if keys.is_a?(Array)
-        keys = [">"] if keys.empty?
+        keys = [ALL_KEYS] if keys.empty?
         keys.map { |key| "#{@pre}#{key}" }
       else
         "#{@pre}#{keys}"
@@ -467,7 +513,7 @@ module NATS
           revision: meta.sequence.stream,
           delta: meta.num_pending,
           created: meta.timestamp,
-          operation: op
+          operation: op || KV_PUT
         )
         watcher._updates.push(entry)
 

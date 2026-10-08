@@ -121,7 +121,7 @@ describe "KeyValue TTLs and limit markers" do
       kv.create("k", "v", ttl: 1)
       entry = w.updates(timeout: 2)
       expect(entry.key).to eql("k")
-      expect(entry.operation).to be_nil
+      expect(entry.operation).to eql("PUT")
 
       marker = w.updates(timeout: 10)
       expect(marker.key).to eql("k")

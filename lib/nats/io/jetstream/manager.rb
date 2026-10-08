@@ -604,7 +604,8 @@ module NATS
         raw_msg = JetStream::API::RawStreamMsg.new(
           subject: subject,
           seq: seq,
-          headers: msg.header
+          headers: msg.header,
+          time: msg.header[JetStream::Header::TIME_STAMP]
         )
         raw_msg.data = msg.data
 

@@ -504,9 +504,15 @@ module NATS
         end
       end
 
-      RawStreamMsg = Struct.new(:subject, :seq, :data, :headers, keyword_init: true) do
+      # RawStreamMsg is a message got from a stream.
+      #
+      # @!attribute time
+      #   When the stream stored the message.
+      #   @return [Time]
+      RawStreamMsg = Struct.new(:subject, :seq, :data, :headers, :time, keyword_init: true) do
         def initialize(opts)
           opts[:data] = Base64.decode64(opts[:data]) if opts[:data]
+          opts[:time] = ::Time.parse(opts[:time]) if opts[:time].is_a?(String)
           if opts[:hdrs]
             header = Base64.decode64(opts[:hdrs])
             hdr = {}
