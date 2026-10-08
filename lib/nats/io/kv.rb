@@ -229,6 +229,42 @@ module NATS
       @js.publish("#{@pre}#{key}", header: hdrs, ttl: params[:ttl])
     end
 
+    # How old the delete and purge markers that purge_deletes removes have to
+    # be by default, in seconds.
+    PURGE_DELETES_MARKER_THRESHOLD = 30 * 60
+
+    # purge_deletes removes the data of the keys that were deleted or
+    # purged, like PurgeDeletes of nats.go. It also removes their markers
+    # when older than :older_than, so that recent ones still reach watchers.
+    # @param params [Hash] Options of the purge.
+    # @option params [Numeric] :older_than Seconds after which markers are
+    #   removed too, like DeleteMarkersOlderThan of nats.go: 30 minutes when
+    #   nil or 0, and all markers when negative.
+    # @return [nil]
+    def purge_deletes(params = {})
+      older_than = params[:older_than] || 0
+      older_than = PURGE_DELETES_MARKER_THRESHOLD if older_than == 0
+      limit = Time.now - older_than if older_than > 0
+
+      markers = []
+      w = watchall
+      begin
+        w.each do |entry|
+          break if entry.nil?
+          markers << entry if (entry.operation == KV_DEL) || (entry.operation == KV_PURGE)
+        end
+      ensure
+        # Stop before purging, so that the purges do not reach the watcher.
+        w.stop
+      end
+
+      markers.each do |entry|
+        keep = 1 if limit && entry.created > limit
+        @js.purge_stream(@stream, subject: "#{@pre}#{entry.key}", keep: keep)
+      end
+      nil
+    end
+
     # status retrieves the status and configuration of a bucket.
     def status
       info = @js.stream_info(@stream)

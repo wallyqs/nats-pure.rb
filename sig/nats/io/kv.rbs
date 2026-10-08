@@ -36,6 +36,10 @@ module NATS
 
     def purge: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PubAck
 
+    PURGE_DELETES_MARKER_THRESHOLD: Integer
+
+    def purge_deletes: (?Hash[Symbol, untyped]) -> nil
+
     def status: () -> NATS::KeyValue::BucketStatus
 
     class Entry < Struct[untyped]
