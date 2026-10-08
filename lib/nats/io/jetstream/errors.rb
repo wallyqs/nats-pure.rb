@@ -70,6 +70,11 @@ module NATS
       # its timeout.
       class AsyncPublishTimeout < Error; end
 
+      # When js.cleanup_publisher ends a message published with
+      # publish_async that still awaited its ack, like
+      # ErrJetStreamPublisherClosed of nats.go.
+      class PublisherClosed < Error; end
+
       # When a pull that asked for idle heartbeats heard nothing for two of
       # them, as when the server is gone or the consumer was deleted.
       class NoHeartbeat < Error; end

@@ -258,6 +258,35 @@ module NATS
       true
     end
 
+    # cleanup_publisher cleans up the publishing side of the context, like
+    # CleanupPublisher of nats.go: it unsubscribes from the replies of
+    # publish_async and fails the futures that still await their acks with
+    # NATS::JetStream::Error::PublisherClosed, calling the
+    # publish_async_err_handler for each. The context can still be used: the
+    # next publish_async subscribes to the replies again, but the acks of
+    # the earlier messages are lost.
+    # @return [nil]
+    def cleanup_publisher
+      sub, listener, futures = @async_mon.synchronize do
+        taken = [@async_sub, @async_listener, @async_acks.values]
+        @async_sub = nil
+        @async_prefix = nil
+        @async_listener = nil
+        @async_acks.keys.each { |reply| remove_async_future(reply) }
+        taken
+      end
+      @nc.send(:remove_status_listener, listener) if listener
+      begin
+        sub&.unsubscribe
+      rescue NATS::IO::Error
+        # The connection is closed, and the subscription with it.
+      end
+      futures.each do |future|
+        resolve_async_future(future, err: JetStream::Error::PublisherClosed.new("nats: jetstream context closed"))
+      end
+      nil
+    end
+
     # subscribe binds or creates a push subscription to a JetStream push consumer.
     #
     # Like js.Subscribe of nats.go, the subscription takes the control

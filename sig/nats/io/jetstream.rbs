@@ -23,6 +23,8 @@ module NATS
 
     def publish_async_complete: (?timeout: Numeric?) -> true
 
+    def cleanup_publisher: () -> nil
+
     def subscribe: (String, Hash[Symbol, untyped]) { (?(NATS::Msg | String), ?String, ?String, ?Hash[Symbol, untyped]) -> void } -> NATS::JetStream::PushSubscription
 
     def pull_subscribe: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PullSubscription
