@@ -1,0 +1,83 @@
+module NATS
+  class JetStream
+    class MessagesContext
+      include Enumerable[NATS::Msg]
+
+      DEFAULT_MAX_MESSAGES: Integer
+      DEFAULT_EXPIRES: Integer
+      BYTES_ONLY_BATCH: Integer
+      POLL_INTERVAL: Float
+
+      attr_reader opts: Hash[Symbol, untyped]
+
+      attr_accessor on_error: (^(Exception) -> void)?
+
+      def initialize: (NATS::JetStream::PullSubscription, ?Hash[Symbol, untyped]) -> void
+
+      def next: (?timeout: Numeric?) -> NATS::Msg
+
+      def each: () { (NATS::Msg) -> void } -> self
+              | () -> Enumerator[NATS::Msg, self]
+
+      def stop: () -> void
+
+      def drain: () -> void
+
+      def closed?: () -> bool
+
+      def closed_reason: () -> (Symbol | Exception | nil)
+
+      def self.consume_opts: (Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+
+      private
+
+      def next_msg: (Float?) -> NATS::Msg
+
+      def check_closed!: () -> void
+
+      def draining?: () -> bool
+
+      def reconnected?: () -> bool
+
+      def reset_pending: () -> void
+
+      def check_pending: () -> void
+
+      def wait_msg: (Float) -> (NATS::Msg | :drained | nil)
+
+      def flush_drained: () -> void
+
+      def handle_status: (NATS::Msg) -> void
+
+      def pull_ended: (NATS::Msg) -> void
+
+      def report: (Exception) -> void
+
+      def fail_with: (Exception) -> bot
+
+      def close: (Symbol | Exception) -> void
+    end
+
+    class ConsumeContext
+      def initialize: (NATS::JetStream::PullSubscription, Hash[Symbol, untyped], ^(NATS::Msg) -> void) -> void
+
+      def opts: () -> Hash[Symbol, untyped]
+
+      def stop: () -> void
+
+      def drain: () -> void
+
+      def closed?: () -> bool
+
+      def wait_closed: (?Numeric?) -> bool
+
+      def messages_context: () -> NATS::JetStream::MessagesContext
+
+      private
+
+      def run: () -> void
+
+      def report: (Exception) -> void
+    end
+  end
+end

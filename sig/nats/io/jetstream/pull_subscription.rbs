@@ -12,6 +12,10 @@ module NATS
 
       def fetch: (Integer, Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
 
+      def consume: (?Hash[Symbol, untyped]) { (NATS::Msg) -> void } -> NATS::JetStream::ConsumeContext
+
+      def messages: (?Hash[Symbol, untyped]) -> NATS::JetStream::MessagesContext
+
       def consumer_info: (Hash[Symbol, untyped]) -> NATS::JetStream::ConsumerInfo
 
       private
