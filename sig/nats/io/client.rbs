@@ -270,6 +270,10 @@ module NATS
 
     def drain_sub: (NATS::Subscription) -> void
 
+    def drain_subscription: (NATS::Subscription) -> nil
+
+    def finish_sub_drain: (NATS::Subscription) -> void
+
     def do_drain: () -> void
 
     def send_flush_queue: (Symbol) -> void

@@ -36,6 +36,26 @@ module NATS
     attr_accessor :closed, :drained
     alias_method :delivered, :received
 
+    # @private
+    # A barrier of nc.barrier, which runs its block once every subscription
+    # it was added to passed it.
+    class Barrier
+      def initialize(subs, nc, block)
+        @left = subs
+        @nc = nc
+        @block = block
+        @mutex = Mutex.new
+      end
+
+      def pass
+        return unless @mutex.synchronize { (@left -= 1).zero? }
+
+        @block.call
+      rescue => e
+        @nc.send(:err_cb_call, @nc, e, nil)
+      end
+    end
+
     def initialize(**opts)
       super() # required to initialize monitor
       @subject = ""
@@ -68,6 +88,15 @@ module NATS
       @processing = {}
       @barriers = []
 
+      # Messages dropped as the subscription was a slow consumer, and the
+      # most messages and bytes that were pending.
+      @dropped = 0
+      @max_pending_msgs = 0
+      @max_pending_bytes = 0
+
+      # Called with the subject once the subscription is closed.
+      @closed_cb = nil
+
       # To limit number of concurrent messages being processed (1 to only allow sequential processing)
       @processing_concurrency = opts.fetch(:processing_concurrency, NATS::IO::DEFAULT_SINGLE_SUB_CONCURRENCY)
     end
@@ -91,6 +120,56 @@ module NATS
     # subscription in case already present and has received enough messages.
     def unsubscribe(opt_max = nil)
       @nc.send(:unsubscribe, self, opt_max)
+    end
+
+    # Drains the subscription, like Drain of nats.go: unsubscribes, and lets
+    # the messages that were received until the server confirms that, and
+    # those still pending, be processed before the subscription is closed,
+    # in the background. Use on_close to know when it is done. It takes at
+    # most the drain_timeout of the connection, after which on_error gets a
+    # NATS::IO::DrainTimeoutError.
+    # @raise [NATS::IO::BadSubscription] When the subscription is closed.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    # @raise [NATS::IO::ConnectionDrainingError] When the connection drains.
+    def drain
+      @nc.send(:drain_subscription, self)
+    end
+
+    # Whether the subscription is draining, like IsDraining of nats.go;
+    # false once the drain is done.
+    def draining?
+      synchronize { !!@drained && !@closed }
+    end
+
+    # The number of messages dropped as the subscription had as many
+    # pending as its pending limits allow, like Dropped of nats.go.
+    # @return [Integer]
+    def dropped
+      synchronize { @dropped }
+    end
+
+    # The most messages and bytes that were pending at once for a
+    # subscription with a callback, like MaxPending of nats.go.
+    # @return [Array(Integer, Integer)] The messages and the bytes.
+    def max_pending
+      synchronize { [@max_pending_msgs, @max_pending_bytes] }
+    end
+
+    # Resets max_pending, like ClearMaxPending of nats.go.
+    def clear_max_pending
+      synchronize do
+        @max_pending_msgs = 0
+        @max_pending_bytes = 0
+      end
+      nil
+    end
+
+    # Sets the callback called with the subject of a subscription with a
+    # callback once it is closed, like SetClosedHandler of nats.go: once it
+    # is unsubscribed, or reached its max messages, and the messages it got
+    # were processed; once its drain is done; or when the connection closes.
+    def on_close(&callback)
+      synchronize { @closed_cb = callback }
     end
 
     # next_msg blocks and waiting for the next message to be received.
@@ -122,6 +201,8 @@ module NATS
         pending_queue << msg
         self.pending_size += msg.data.size
         @enqueued += 1
+        @max_pending_msgs = pending_queue.size if pending_queue.size > @max_pending_msgs
+        @max_pending_bytes = pending_size if pending_size > @max_pending_bytes
       end
 
       # For async subscribers, send message for processing to the thread pool.
@@ -184,6 +265,31 @@ module NATS
     end
 
     private
+
+    # Called by the client for a message it dropped. The lock is held.
+    def dropped!
+      @dropped += 1
+    end
+
+    # Whether no message is pending or being processed.
+    def idle?
+      synchronize { pending_queue.nil? || (pending_queue.empty? && @processing.empty?) }
+    end
+
+    # Called by the client once the subscription is gone. Runs the closed
+    # handler, once, after the messages dispatched so far were processed,
+    # unless told not to wait, as when the connection is closed.
+    def closed!(wait: true)
+      handler = synchronize do
+        next unless callback
+
+        @closed_cb.tap { @closed_cb = nil }
+      end
+      return unless handler
+
+      barrier = Barrier.new(1, @nc, proc { handler.call(subject) })
+      wait ? add_barrier(barrier) : barrier.pass
+    end
 
     # Called by the client for a barrier, which is passed once the messages
     # dispatched so far have been processed, even when processed
