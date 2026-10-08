@@ -234,7 +234,7 @@ module NATS
       def consume(params = {}, &block)
         raise ArgumentError.new("nats: consume needs a block") unless block
 
-        ConsumeContext.new(self, params, block)
+        ConsumeContext.new(MessagesContext.new(self, params), @nc, params, block)
       end
 
       # messages returns an iterator over the messages of the consumer,

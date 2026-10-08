@@ -78,6 +78,22 @@ module NATS
       # or drained, or the connection closed.
       class MsgIteratorClosed < Error; end
 
+      # When an ordered consumer that was read with fetch is read with
+      # consume or messages.
+      class OrderedConsumerUsedAsFetch < Error; end
+
+      # When an ordered consumer that was read with consume or messages is
+      # read with fetch.
+      class OrderedConsumerUsedAsConsume < Error; end
+
+      # When an ordered consumer is read by two fetches at once, or by
+      # consume or messages while another still runs.
+      class OrderedConsumerConcurrentRequests < Error; end
+
+      # When the info of an ordered consumer is asked for while it has no
+      # consumer, as creating it again failed.
+      class OrderedConsumerNotCreated < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
