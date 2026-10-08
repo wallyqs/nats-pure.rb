@@ -20,7 +20,9 @@ module NATS
 
       def pull_pending: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
 
-      def receive: (Array[NATS::Msg], Integer, String?, ^() -> NATS::Msg?) ?{ (NATS::Msg) -> void } -> bool
+      def receive: (Array[NATS::Msg], Hash[Symbol, untyped], String?, ^() -> NATS::Msg?) ?{ (NATS::Msg) -> void } -> bool
+
+      def take_pending: (Array[NATS::Msg], Integer, Integer?) ?{ (NATS::Msg) -> void } -> Integer?
 
       def release: (NATS::Subscription, Float) -> void
 

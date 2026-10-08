@@ -244,6 +244,16 @@ module NATS
           @code ||= 423
         end
       end
+
+      # When the server ended the pull of a fetch with max_bytes before the
+      # fetch got a message, as the next message would exceed max_bytes.
+      # This condition is represented with a message that has 409 status code header.
+      class MaxBytesExceeded < APIError
+        def initialize(params = {})
+          super
+          @code ||= 409
+        end
+      end
     end
   end
 end

@@ -77,6 +77,7 @@ module NATS
           req[:batch] = next_req[:batch]
           req[:expires] = next_req[:expires].to_i if next_req[:expires]
           req[:no_wait] = next_req[:no_wait] if next_req[:no_wait]
+          req[:max_bytes] = next_req[:max_bytes] if next_req[:max_bytes]
           # Priority groups (requires nats-server v2.11.0).
           req.merge!(next_req.slice(:group, :min_pending, :min_ack_pending, :priority, :id).compact)
           req.to_json
@@ -124,12 +125,30 @@ module NATS
           code = msg.header[JS::Header::Status]
           desc = msg.header[JS::Header::Desc]
           return ::NATS::JetStream::Error::PinIdMismatch.new({description: desc}) if code == Status::PinIdMismatch
+          return ::NATS::JetStream::Error::MaxBytesExceeded.new({description: desc}) if max_bytes_exceeded?(msg)
 
           klass = if code == Status::Conflict
             # Matched as nats.go matches them, by what the description has.
             CONFLICT_ERRORS.find { |text, _| desc.to_s.downcase.include?(text) }&.last
           end
           (klass || ::NATS::JetStream::API::Error).new({code: code, description: desc})
+        end
+
+        # max_bytes_exceeded? tells whether a status says that the server
+        # ended a pull as its next message would exceed its max_bytes.
+        def max_bytes_exceeded?(msg)
+          msg.header[Header::Status] == Status::Conflict &&
+            msg.header[Header::Desc].to_s.downcase.include?("message size exceeds maxbytes")
+        end
+
+        # msg_size is the size of a message as the server counts it against
+        # the max_bytes of a pull: its subject, reply, header and data. The
+        # header is counted as the client writes it, "Key: Value" lines.
+        def msg_size(msg)
+          size = msg.subject.to_s.bytesize + msg.reply.to_s.bytesize + msg.data.to_s.bytesize
+          return size if msg.header.nil? || msg.header.empty?
+
+          size + msg.header.sum("NATS/1.0\r\n\r\n".bytesize) { |k, v| "#{k}: #{v}\r\n".bytesize }
         end
 
         # from_error takes an API response that errored and maps the error
