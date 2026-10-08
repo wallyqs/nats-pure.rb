@@ -26,6 +26,51 @@ module NATS
     module JS
       DefaultAPIPrefix = "$JS.API" # rubocop:disable Naming/ConstantName
 
+      # The errors for the status codes of the JetStream API.
+      STATUS_ERRORS = {
+        400 => ::NATS::JetStream::Error::BadRequest,
+        404 => ::NATS::JetStream::Error::NotFound,
+        500 => ::NATS::JetStream::Error::ServerError,
+        503 => ::NATS::JetStream::Error::ServiceUnavailable
+      }.freeze
+
+      # The errors for the err_codes of the JetStream API that nats.go
+      # names, from errors.json of nats-server.
+      ERR_CODE_ERRORS = {
+        10012 => ::NATS::JetStream::Error::ConsumerCreate,
+        10013 => ::NATS::JetStream::Error::ConsumerNameAlreadyInUse,
+        10014 => ::NATS::JetStream::Error::ConsumerNotFound,
+        10026 => ::NATS::JetStream::Error::MaximumConsumersLimit,
+        10037 => ::NATS::JetStream::Error::MsgNotFound,
+        10039 => ::NATS::JetStream::Error::JetStreamNotEnabledForAccount,
+        10058 => ::NATS::JetStream::Error::StreamNameAlreadyInUse,
+        10059 => ::NATS::JetStream::Error::StreamNotFound,
+        10071 => ::NATS::JetStream::Error::WrongLastSequence,
+        10076 => ::NATS::JetStream::Error::JetStreamNotEnabled,
+        10136 => ::NATS::JetStream::Error::DuplicateFilterSubjects,
+        10138 => ::NATS::JetStream::Error::OverlappingFilterSubjects,
+        10139 => ::NATS::JetStream::Error::EmptyFilter,
+        10148 => ::NATS::JetStream::Error::ConsumerAlreadyExists,
+        10149 => ::NATS::JetStream::Error::ConsumerDoesNotExist,
+        10164 => ::NATS::JetStream::Error::WrongLastSequence,
+        10186 => ::NATS::JetStream::Error::MirrorWithMsgSchedules,
+        10187 => ::NATS::JetStream::Error::SourceWithMsgSchedules,
+        10188 => ::NATS::JetStream::Error::MessageSchedulesDisabled,
+        10189 => ::NATS::JetStream::Error::SchedulePatternInvalid,
+        10190 => ::NATS::JetStream::Error::ScheduleTargetInvalid,
+        10191 => ::NATS::JetStream::Error::ScheduleTTLInvalid,
+        10192 => ::NATS::JetStream::Error::ScheduleRollupInvalid,
+        10203 => ::NATS::JetStream::Error::ScheduleSourceInvalid,
+        10204 => ::NATS::JetStream::Error::ConsumerInvalidReset
+      }.freeze
+
+      # The errors for the descriptions of the 409 statuses that end pulls.
+      CONFLICT_ERRORS = {
+        "consumer deleted" => ::NATS::JetStream::Error::ConsumerDeleted,
+        "leadership change" => ::NATS::JetStream::Error::ConsumerLeadershipChanged,
+        "server shutdown" => ::NATS::JetStream::Error::ServerShutdown
+      }.freeze
+
       class << self
         def next_req_to_json(next_req)
           req = {}
@@ -80,41 +125,30 @@ module NATS
           desc = msg.header[JS::Header::Desc]
           return ::NATS::JetStream::Error::PinIdMismatch.new({description: desc}) if code == Status::PinIdMismatch
 
-          ::NATS::JetStream::API::Error.new({code: code, description: desc})
+          klass = if code == Status::Conflict
+            # Matched as nats.go matches them, by what the description has.
+            CONFLICT_ERRORS.find { |text, _| desc.to_s.downcase.include?(text) }&.last
+          end
+          (klass || ::NATS::JetStream::API::Error).new({code: code, description: desc})
         end
 
         # from_error takes an API response that errored and maps the error
         # into a JetStream error type based on the status and error code.
+        #
+        # An err_code the client knows gives an error of its own, which is a
+        # subclass of the error for the status code, so that rescuing that
+        # one rescues it too. An err_code sent with another status code than
+        # the server sends it with gives the error for the status code, and
+        # an unknown status code an API::Error.
         def from_error(err)
           return unless err
-          case err[:code]
-          when 503
-            ::NATS::JetStream::Error::ServiceUnavailable.new(err)
-          when 500
-            ::NATS::JetStream::Error::ServerError.new(err)
-          when 404
-            case err[:err_code]
-            when 10059
-              ::NATS::JetStream::Error::StreamNotFound.new(err)
-            when 10014
-              ::NATS::JetStream::Error::ConsumerNotFound.new(err)
-            else
-              ::NATS::JetStream::Error::NotFound.new(err)
-            end
-          when 400
-            case err[:err_code]
-            when 10148
-              ::NATS::JetStream::Error::ConsumerAlreadyExists.new(err)
-            when 10149
-              ::NATS::JetStream::Error::ConsumerDoesNotExist.new(err)
-            when 10204
-              ::NATS::JetStream::Error::ConsumerInvalidReset.new(err)
-            else
-              ::NATS::JetStream::Error::BadRequest.new(err)
-            end
-          else
-            ::NATS::JetStream::API::Error.new(err)
-          end
+
+          base = STATUS_ERRORS[err[:code]]
+          return ::NATS::JetStream::API::Error.new(err) unless base
+
+          klass = ERR_CODE_ERRORS[err[:err_code]]
+          klass = base unless klass && klass < base
+          klass.new(err)
         end
       end
     end

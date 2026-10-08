@@ -63,6 +63,8 @@ module NATS
 
       def api_request: (String, String, ?Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
 
+      def parse_response: (NATS::Msg) -> Hash[Symbol, untyped]
+
       def _lift_msg_to_raw_msg: (NATS::Msg) -> JetStream::API::RawStreamMsg
 
       def stream_config_json: (JetStream::API::StreamConfig) -> String

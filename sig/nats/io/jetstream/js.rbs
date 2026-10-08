@@ -3,6 +3,12 @@ module NATS
     module JS
       DefaultAPIPrefix: '$JS.API'
 
+      STATUS_ERRORS: Hash[Integer, singleton(NATS::JetStream::Error::APIError)]
+
+      ERR_CODE_ERRORS: Hash[Integer, singleton(NATS::JetStream::Error::APIError)]
+
+      CONFLICT_ERRORS: Hash[String, singleton(NATS::JetStream::Error::APIError)]
+
       # class << self
       def self.next_req_to_json: (Hash[Symbol, untyped]) -> String
 
@@ -14,15 +20,7 @@ module NATS
 
       def self.from_msg: (NATS::Msg) -> (NATS::JetStream::API::Error | NATS::JetStream::Error::PinIdMismatch)
 
-      def self.from_error: (Hash[Symbol, untyped]) -> (
-          NATS::JetStream::Error::ServiceUnavailable |
-          NATS::JetStream::Error::ServerError |
-          NATS::JetStream::Error::StreamNotFound |
-          NATS::JetStream::Error::ConsumerNotFound |
-          NATS::JetStream::Error::NotFound |
-          NATS::JetStream::Error::BadRequest |
-          NATS::JetStream::API::Error
-        )
+      def self.from_error: (Hash[Symbol, untyped]) -> NATS::JetStream::API::Error
       # end class << self
     end
   end

@@ -570,7 +570,7 @@ module NATS
         result = if params[:direct]
           msg
         else
-          JSON.parse(msg.data, symbolize_names: true)
+          parse_response(msg)
         end
         if result.is_a?(Hash) && result[:error]
           raise JS.from_error(result[:error])
@@ -579,11 +579,22 @@ module NATS
         result
       end
 
+      # parse_response parses the response of the JetStream API, which has to
+      # be a JSON object.
+      def parse_response(msg)
+        result = JSON.parse(msg.data, symbolize_names: true)
+        return result if result.is_a?(Hash)
+
+        raise JetStream::Error::InvalidJetStreamResponse.new("nats: invalid jetstream api response")
+      rescue JSON::ParserError
+        raise JetStream::Error::InvalidJetStreamResponse.new("nats: invalid jetstream api response")
+      end
+
       def _lift_msg_to_raw_msg(msg)
         if msg.header && msg.header["Status"]
           status = msg.header["Status"]
           if status == "404"
-            raise ::NATS::JetStream::Error::NotFound.new
+            raise ::NATS::JetStream::Error::MsgNotFound.new
           else
             raise JS.from_msg(msg)
           end

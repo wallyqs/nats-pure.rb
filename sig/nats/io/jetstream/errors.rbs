@@ -25,6 +25,21 @@ module NATS
       class MsgDeleteUnsuccessful < NATS::JetStream::Error
       end
 
+      class NotPullConsumer < NATS::JetStream::Error
+      end
+
+      class NotPushConsumer < NATS::JetStream::Error
+      end
+
+      class MsgNotBound < NATS::JetStream::Error
+      end
+
+      class MsgNoReply < NATS::JetStream::Error
+      end
+
+      class InvalidJetStreamResponse < NATS::JetStream::Error
+      end
+
       class APIError < NATS::JetStream::Error
         attr_reader code: Integer
         attr_reader err_code: Integer
@@ -44,6 +59,9 @@ module NATS
       class NotFound < NATS::JetStream::Error::APIError
       end
 
+      class MsgNotFound < NATS::JetStream::Error::NotFound
+      end
+
       class StreamNotFound < NATS::JetStream::Error::NotFound
       end
 
@@ -53,6 +71,51 @@ module NATS
       class BadRequest < NATS::JetStream::Error::APIError
       end
 
+      class StreamNameAlreadyInUse < NATS::JetStream::Error::BadRequest
+      end
+
+      class ConsumerNameAlreadyInUse < NATS::JetStream::Error::BadRequest
+      end
+
+      class MaximumConsumersLimit < NATS::JetStream::Error::BadRequest
+      end
+
+      class DuplicateFilterSubjects < NATS::JetStream::Error::BadRequest
+      end
+
+      class OverlappingFilterSubjects < NATS::JetStream::Error::BadRequest
+      end
+
+      class EmptyFilter < NATS::JetStream::Error::BadRequest
+      end
+
+      class WrongLastSequence < NATS::JetStream::Error::BadRequest
+      end
+
+      class MessageSchedulesDisabled < NATS::JetStream::Error::BadRequest
+      end
+
+      class SchedulePatternInvalid < NATS::JetStream::Error::BadRequest
+      end
+
+      class ScheduleTargetInvalid < NATS::JetStream::Error::BadRequest
+      end
+
+      class ScheduleTTLInvalid < NATS::JetStream::Error::BadRequest
+      end
+
+      class ScheduleRollupInvalid < NATS::JetStream::Error::BadRequest
+      end
+
+      class ScheduleSourceInvalid < NATS::JetStream::Error::BadRequest
+      end
+
+      class MirrorWithMsgSchedules < NATS::JetStream::Error::BadRequest
+      end
+
+      class SourceWithMsgSchedules < NATS::JetStream::Error::BadRequest
+      end
+
       class ConsumerAlreadyExists < NATS::JetStream::Error::BadRequest
       end
 
@@ -60,6 +123,24 @@ module NATS
       end
 
       class ConsumerInvalidReset < NATS::JetStream::Error::BadRequest
+      end
+
+      class ConsumerCreate < NATS::JetStream::Error::ServerError
+      end
+
+      class JetStreamNotEnabled < NATS::JetStream::Error::ServiceUnavailable
+      end
+
+      class JetStreamNotEnabledForAccount < NATS::JetStream::Error::ServiceUnavailable
+      end
+
+      class ConsumerDeleted < NATS::JetStream::Error::APIError
+      end
+
+      class ConsumerLeadershipChanged < NATS::JetStream::Error::APIError
+      end
+
+      class ServerShutdown < NATS::JetStream::Error::APIError
       end
 
       class PinIdMismatch < NATS::JetStream::Error::APIError
