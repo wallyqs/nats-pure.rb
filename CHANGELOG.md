@@ -4,6 +4,7 @@
 
 ### Added
 
+- JetStream: `jsm.stream_names` and `jsm.streams` list the names and the `StreamInfo` of the streams, like `StreamNames` and `Streams` of nats.go, optionally only those that take a `subject:` (wildcards allowed), like `WithStreamListSubject`; `jsm.consumer_names(stream)` and `jsm.consumers(stream)` list the names and the `ConsumerInfo` of the consumers of a stream, like `ConsumerNames` and `Consumers`. They return Arrays, requesting as many pages as the server has.
 - JetStream: `jsm.delete_msg(stream, seq)` and `jsm.secure_delete_msg(stream, seq)` delete a message from a stream, like `DeleteMsg` and `SecureDeleteMsg` of nats.go; the secure variant overwrites the message's data. A deletion that the server does not confirm raises `NATS::JetStream::Error::MsgDeleteUnsuccessful`.
 - JetStream: `jsm.purge_stream(name)` purges a stream, like `PurgeStream` of nats.go: all its messages, or only those on a `subject:` (wildcards allowed), those below a sequence (`seq:`), or all but the latest `keep:` ones. It returns a `StreamPurgeResponse` with the number of messages `purged`. `seq:` and `keep:` together raise `ArgumentError`.
 
