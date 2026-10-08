@@ -552,6 +552,7 @@ module NATS
           config[key] = JS.nanoseconds(config[key], name) if config[key]
         end
         config[:pause_until] = rfc3339(config[:pause_until])
+        config[:opt_start_time] = rfc3339(config[:opt_start_time])
 
         cfg = config.to_h.compact
         req = {
@@ -705,8 +706,8 @@ module NATS
       # stream_config_json makes the request to create or update a stream.
       def stream_config_json(config)
         cfg = config.to_h.compact.reject { |key, value| UNSENT_STREAM_DEFAULTS[key]&.include?(value) }
-        cfg[:mirror] = source_domain(cfg[:mirror]) if cfg[:mirror]
-        cfg[:sources] = cfg[:sources].map { |source| source_domain(source) } if cfg[:sources]
+        cfg[:mirror] = source_json(source_domain(cfg[:mirror])) if cfg[:mirror]
+        cfg[:sources] = cfg[:sources].map { |source| source_json(source_domain(source)) } if cfg[:sources]
         cfg.to_json
       end
 
@@ -727,6 +728,14 @@ module NATS
         end
 
         source.merge(external: {api: "$JS.#{domain}.API"})
+      end
+
+      # source_json formats the opt_start_time of a mirror or source given
+      # as a Time, on a copy.
+      def source_json(source)
+        return source unless source.is_a?(Hash) && source[:opt_start_time].is_a?(Time)
+
+        source.merge(opt_start_time: rfc3339(source[:opt_start_time]))
       end
     end
   end

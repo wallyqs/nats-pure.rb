@@ -25,11 +25,23 @@ module NATS
       # When the server responds with an error from the JetStream API.
       Error = ::NATS::JetStream::Error::APIError
 
+      # The times that the server sends stay RFC 3339 Strings in the
+      # attributes that have always had them. Each has a reader that parses
+      # it into a Time, named after it with _time in place of a _ts suffix,
+      # or else after it: StreamState#first_time and #last_time,
+      # SequenceInfo#last_active_time, ClusterInfo#leader_since_time and
+      # DesiredClusterInfo#created_time, like the time.Time fields of
+      # nats.go. They return nil for a time the server left out, or sent as
+      # Go's zero time, as for an empty stream.
+
       # SequenceInfo is a pair of consumer and stream sequence and last activity.
       # @!attribute consumer_seq
       #   @return [Integer] The consumer sequence.
       # @!attribute stream_seq
       #   @return [Integer] The stream sequence.
+      # @!attribute last_active
+      #   @return [String, nil] When the last message was delivered or acked,
+      #     as the server sent it.
       SequenceInfo = Struct.new(:consumer_seq, :stream_seq, :last_active,
         keyword_init: true) do
         def initialize(opts = {})
@@ -38,6 +50,42 @@ module NATS
           opts.delete_if { |k| rem.include?(k) }
           super
           freeze
+        end
+
+        # @return [Time, nil] last_active as a Time, like LastActive of nats.go.
+        def last_active_time
+          JS.parse_time(last_active)
+        end
+      end
+
+      # ClusterInfo is the cluster of a stream or a consumer, as the server
+      # sends it: a Hash with Symbol keys, such as :leader and :replicas,
+      # whose times and durations are those of the server. When the cluster
+      # is changing, :desired has a DesiredClusterInfo.
+      class ClusterInfo < Hash
+        # @!visibility private
+        def self.decode(cluster)
+          return cluster unless cluster.is_a?(Hash)
+
+          info = self[cluster]
+          info[:desired] = DesiredClusterInfo[info[:desired]] if info[:desired].is_a?(Hash)
+          info
+        end
+
+        # @return [Time, nil] When the leader was elected (requires
+        #   nats-server v2.12.0), like LeaderSince of nats.go.
+        def leader_since_time
+          JS.parse_time(self[:leader_since])
+        end
+      end
+
+      # DesiredClusterInfo is the cluster that a stream or consumer is
+      # changing to, as the server sends it: a Hash with Symbol keys, such
+      # as :created, :replicas and :status.
+      class DesiredClusterInfo < Hash
+        # @return [Time, nil] When the change started, like Created of nats.go.
+        def created_time
+          JS.parse_time(self[:created])
         end
       end
 
@@ -88,9 +136,10 @@ module NATS
       #   The cluster of a clustered consumer, such as its leader, its
       #   replicas and, as leader_since, when the leader was elected
       #   (requires nats-server v2.12.0); nil on a standalone server. The
-      #   values are the server's: leader_since is a String, and the
-      #   active of the replicas is in nanoseconds.
-      #   @return [Hash, nil]
+      #   values are the server's: leader_since is a String, which
+      #   leader_since_time parses, and the active of the replicas is in
+      #   nanoseconds.
+      #   @return [ClusterInfo, nil]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
@@ -115,6 +164,7 @@ module NATS
           opts[:ts] = Time.parse(opts[:ts]) if opts[:ts]
           opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
           opts[:priority_groups] = opts[:priority_groups].map { |state| PriorityGroupState.new(state) } if opts[:priority_groups]
+          opts[:cluster] = ClusterInfo.decode(opts[:cluster])
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
           %i[ack_wait inactive_threshold idle_heartbeat priority_timeout].each do |key|
@@ -142,6 +192,10 @@ module NATS
       #   @return [String]
       # @!attribute deliver_policy
       #   @return [String]
+      # @!attribute opt_start_time
+      #   Time to start at, with the "by_start_time" deliver policy, as a
+      #   Time or as an RFC 3339 String; a fetched config has a String.
+      #   @return [Time, String, nil]
       # @!attribute ack_policy
       #   @return [String]
       # @!attribute ack_wait
@@ -469,6 +523,15 @@ module NATS
       #   new ones, instead of discarding its oldest. Needs discard "new" and
       #   max_msgs_per_subject; the server reports false as nil.
       #   @return [Boolean, nil]
+      # @!attribute mirror
+      #   The stream that the stream mirrors, as `{name:, opt_start_seq:,
+      #   opt_start_time:, filter_subject:, ...}`, where opt_start_time can
+      #   be a Time.
+      #   @return [Hash]
+      # @!attribute sources
+      #   The streams that the stream takes messages from, as Hashes like
+      #   that of mirror.
+      #   @return [Array<Hash>]
       # @!attribute storage
       #   @return [String]
       # @!attribute num_replicas
@@ -616,9 +679,10 @@ module NATS
       #   The cluster of the stream, such as its leader, its replicas and,
       #   as leader_since, when the leader was elected (requires nats-server
       #   v2.12.0). A standalone server reports only itself, as the leader.
-      #   The values are the server's: leader_since is a String, and the
-      #   active of the replicas is in nanoseconds.
-      #   @return [Hash]
+      #   The values are the server's: leader_since is a String, which
+      #   leader_since_time parses, and the active of the replicas is in
+      #   nanoseconds.
+      #   @return [ClusterInfo]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
@@ -630,6 +694,7 @@ module NATS
           opts[:state] = StreamState.new(opts[:state])
           opts[:created] = ::Time.parse(opts[:created])
           opts[:ts] = ::Time.parse(opts[:ts]) if opts[:ts]
+          opts[:cluster] = ClusterInfo.decode(opts[:cluster])
 
           # Filter fields and freeze.
           rem = opts.keys - members
@@ -647,8 +712,12 @@ module NATS
       #   @return [Integer]
       # @!attribute first_seq
       #   @return [Integer]
+      # @!attribute first_ts
+      #   @return [String] When the first message was stored, as the server sent it.
       # @!attribute last_seq
       #   @return [Integer]
+      # @!attribute last_ts
+      #   @return [String] When the last message was stored, as the server sent it.
       # @!attribute consumer_count
       #   @return [Integer]
       # @!attribute deleted
@@ -681,6 +750,18 @@ module NATS
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
+        end
+
+        # @return [Time, nil] first_ts as a Time, like FirstTime of nats.go;
+        #   nil for an empty stream.
+        def first_time
+          JS.parse_time(first_ts)
+        end
+
+        # @return [Time, nil] last_ts as a Time, like LastTime of nats.go;
+        #   nil for a stream that never had a message.
+        def last_time
+          JS.parse_time(last_ts)
         end
       end
 

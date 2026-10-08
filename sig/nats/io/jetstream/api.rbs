@@ -4,7 +4,18 @@ module NATS
       class Error < NATS::JetStream::Error::APIError
       end
 
-      class SequenceInfo < Struct[Integer]
+      class SequenceInfo < Struct[Integer | String]
+        def last_active_time: () -> Time?
+      end
+
+      class ClusterInfo < Hash[Symbol, untyped]
+        def self.decode: (Hash[Symbol, untyped]?) -> NATS::JetStream::API::ClusterInfo?
+
+        def leader_since_time: () -> Time?
+      end
+
+      class DesiredClusterInfo < Hash[Symbol, untyped]
+        def created_time: () -> Time?
       end
 
       class PriorityGroupState < Struct[String | Time]
@@ -57,6 +68,9 @@ module NATS
       end
 
       class StreamState < Struct[Integer | String | Array[Integer] | Hash[String, Integer] | NATS::JetStream::API::LostStreamData]
+        def first_time: () -> Time?
+
+        def last_time: () -> Time?
       end
 
       class LostStreamData < Struct[Array[Integer] | Integer]

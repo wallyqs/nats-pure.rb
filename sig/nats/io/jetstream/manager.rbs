@@ -76,6 +76,8 @@ module NATS
       def stream_config_json: (JetStream::API::StreamConfig) -> String
 
       def source_domain: (untyped) -> untyped
+
+      def source_json: (untyped) -> untyped
     end
   end
 end
