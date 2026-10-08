@@ -106,7 +106,9 @@ module NATS
 
         @service = parent.service
         @subject = build_subject(parent, options)
-        @queue = options[:queue] || parent.queue
+        @queue, @queue_group_disabled = Service.resolve_queue_group(
+          options[:queue], options[:queue_group_disabled], parent.queue, parent.queue_group_disabled?
+        )
         @metadata = options[:metadata]
 
         @stats = NATS::Service::Stats.new
@@ -136,6 +138,12 @@ module NATS
         @stopped
       end
 
+      # Whether the endpoint subscribes without a queue group, like
+      # WithEndpointQueueGroupDisabled of nats.go micro.
+      def queue_group_disabled?
+        @queue_group_disabled
+      end
+
       private
 
       def validate(name, options)
@@ -153,7 +161,7 @@ module NATS
       end
 
       def create_handler(block)
-        service.client.subscribe(subject, queue: queue) do |msg|
+        service.client.subscribe(subject, queue: (queue unless queue_group_disabled?)) do |msg|
           started_at = Time.now
 
           req = Request.from_msg(self, msg)

@@ -30,7 +30,9 @@ This name can only contain A-Z, a-z, 0-9, dash, and underscore.
 - `:version` - a service version in the form of a SemVer string.
 - `:description` (optional) - a human-readable description about a service.
 - `:metadata` (optional) - a hash that holds additional information about a service.
-- `:queue` (optional) - a queue group.
+- `:queue` (optional) - a queue group, `q` by default.
+- `:queue_group_disabled` (optional) - `true` to subscribe the endpoints without a queue group
+(see [Queue groups](#queue-groups)).
 - `:error_handler` (optional) - a callable that receives the service and a
 `NATS::Service::NATSError` when one of the service's subscriptions fails (see [Service Lifecycle](#service-lifecycle)).
 - `:endpoint` (optional) - an endpoint added when the service is created, named `default`
@@ -66,6 +68,7 @@ Options can contain:
 - `:subject` (optional) - an optional NATS subject on which the endpoint will be registered. Defaults to `name`.
 - `:metadata` (optional) - a hash containing additional information about an endpoint.
 - `:queue` (optional) - an override for a service and group.
+- `:queue_group_disabled` (optional) - `true` to subscribe without a queue group.
 
 After creating an endpoint you can publish a request on its subject:
 
@@ -142,6 +145,27 @@ min = client.request("min", [5, 100, -7, 34].to_json)
 max = client.request("max", [5, 100, -7, 34].to_json)
 ```
 
+### Queue groups
+
+The endpoints of a service subscribe in a queue group, so that each request is handled by one
+instance of the service: the `:queue` of the endpoint, else of its group, else of the service,
+which defaults to `q`. Like nats.go micro, `queue_group_disabled: true` makes the endpoints of a
+service or group, or an endpoint, subscribe without a queue group, so that every instance gets
+every request, unless an endpoint or group below it sets its own `:queue`. A queue of `""` also
+disables the queue group. An endpoint without a queue group reports a `queue_group` of `""`:
+
+```ruby
+# Every instance of the service gets every request.
+client.services.add(name: "cache", version: "1.0.0", queue_group_disabled: true)
+
+service = client.services.add(name: "orders", version: "1.0.0")
+service.endpoints.add("get") { |message| ... }                                # one instance
+service.endpoints.add("reload", queue_group_disabled: true) { |message| ... } # every instance
+
+group = service.groups.add("admin", queue_group_disabled: true)
+group.endpoints.add("flush") { |message| ... }                                # every instance
+```
+
 ## Groups
 
 Endpoints can be aggregated using groups. A group represents a common
@@ -157,6 +181,8 @@ to a group that will be used for all its endpoints:
 ```ruby
 group = service.groups(name, queue: "queue")
 ```
+
+or turn the queue group off for them with `queue_group_disabled: true`.
 
 When you add an endpoint to a group, the endpoint is registered on the subject 
 created by concatenating the group name and the endpoint subject:
