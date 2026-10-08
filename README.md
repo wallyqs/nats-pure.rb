@@ -277,6 +277,19 @@ NATS.connect({
  })
 ```
 
+Instead of a context, `tls:` can name the files of a client certificate and
+its key, and of the CAs to trust instead of the system ones. For a server that
+expects the TLS handshake before it sends INFO (`handshake_first` in its `tls`
+block), pass `tls_handshake_first: true`:
+
+```ruby
+NATS.connect('tls://127.0.0.1:4444', tls_handshake_first: true, tls: {
+  cert_file: './client-cert.pem',
+  key_file: './client-key.pem',
+  ca_file: './ca.pem'
+})
+```
+
 ## WebSocket
 
 Since NATS Server v2.2 it is possible to connect to a NATS server [using WebSocket](https://docs.nats.io/running-a-nats-service/configuration/websocket).

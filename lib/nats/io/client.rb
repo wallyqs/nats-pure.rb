@@ -314,14 +314,16 @@ module NATS
 
       case uri
       when String
-        # Initialize TLS defaults in case any url is using it.
         srvs = opts[:servers] = process_uri(uri)
-        if srvs.any? { |u| %w[tls wss].include? u.scheme } && !opts[:tls]
-          opts[:tls] = {context: tls_context}
-        end
         @single_url_connect_used = true if srvs.size == 1
       when Hash
         opts = uri
+      end
+
+      # Initialize TLS defaults in case any url is using it, or the TLS
+      # handshake comes first.
+      if !opts[:tls] && (opts[:tls_handshake_first] || Array(opts[:servers]).any? { |u| u.to_s.start_with?("tls://", "wss://") })
+        opts[:tls] = {}
       end
 
       opts[:verbose] = false if opts[:verbose].nil?
@@ -387,6 +389,7 @@ module NATS
 
       # Check for TLS usage
       @tls = @options[:tls]
+      @tls_context = nil
 
       @inbox_prefix = opts.fetch(:custom_inbox_prefix, @inbox_prefix)
 
@@ -881,6 +884,18 @@ module NATS
     def validate_settings!
       raise ArgumentError, "nats: reconnect_buf_size must be an Integer" unless @options[:reconnect_buf_size].is_a?(Integer)
 
+      if @tls
+        files = @tls.slice(:cert_file, :key_file, :ca_file).compact
+        if @tls[:context] && files.any?
+          raise ArgumentError, "nats: tls context cannot be combined with #{files.keys.join(", ")}"
+        end
+        if files.key?(:cert_file) != files.key?(:key_file)
+          raise ArgumentError, "nats: tls cert_file and key_file must be given together"
+        end
+        # Load the files now, so that a bad one fails the connect.
+        tls_context if files.any?
+      end
+
       %i[reconnect_jitter reconnect_jitter_tls].each do |opt|
         jitter = @options[opt]
         raise ArgumentError, "nats: #{opt} must be a number of seconds >= 0" unless jitter.is_a?(Numeric) && jitter >= 0
@@ -1127,6 +1142,19 @@ module NATS
         # https://github.com/ruby/openssl/commit/3e5a009966bd7f806f7180d82cf830a04be28986
         #
         tls_context.set_params
+
+        # Only trust the given CAs, like RootCAs of nats.go.
+        if @tls[:ca_file]
+          store = OpenSSL::X509::Store.new
+          store.add_file(@tls[:ca_file])
+          tls_context.cert_store = store
+        end
+
+        # Present a client certificate, like ClientCert of nats.go.
+        if @tls[:cert_file]
+          tls_context.cert = OpenSSL::X509::Certificate.new(File.read(@tls[:cert_file]))
+          tls_context.key = OpenSSL::PKey.read(File.read(@tls[:key_file]))
+        end
       end
     end
 
@@ -1494,6 +1522,10 @@ module NATS
     end
 
     def process_connect_init
+      # With tls_handshake_first the server expects the TLS handshake
+      # before it sends INFO (nats-server tls { handshake_first: true }).
+      @io.setup_tls! if @options[:tls_handshake_first]
+
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line || line.empty?
@@ -1508,7 +1540,7 @@ module NATS
       end
 
       if server_using_secure_connection? && client_using_secure_connection?
-        @io.setup_tls!
+        @io.setup_tls! unless @options[:tls_handshake_first]
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
       elsif server_using_secure_connection? && !client_using_secure_connection? && (@uri.scheme != "ws")
         raise NATS::IO::ConnectError.new("TLS/SSL required by server")
