@@ -451,7 +451,8 @@ module NATS
 
         params = @params
         params = params.merge(stop_after: params[:stop_after] - @delivered) if params[:stop_after]
-        ctx = MessagesContext.new(psub, params)
+        # Missing heartbeats create the consumer again, as in nats.go.
+        ctx = MessagesContext.new(psub, params.merge(err_on_missing_heartbeat: true))
         ctx.notify_reconnect = true
         ctx
       end

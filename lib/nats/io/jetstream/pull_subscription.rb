@@ -241,7 +241,9 @@ module NATS
       def consume(params = {}, &block)
         raise Error::HandlerRequired unless block
 
-        ConsumeContext.new(MessagesContext.new(self, params), @nc, params, block)
+        # As in nats.go, the consumption reports each missing heartbeat.
+        messages = MessagesContext.new(self, params.except(:err_on_missing_heartbeat))
+        ConsumeContext.new(messages, @nc, params, block)
       end
 
       # messages returns an iterator over the messages of the consumer,
@@ -256,6 +258,10 @@ module NATS
       #   msgs.stop
       #
       # @param params [Hash] The options of {#consume}, but :error_handler.
+      # @option params [Boolean] :err_on_missing_heartbeat Whether next raises
+      #   NoHeartbeat when the heartbeats stopped, like
+      #   WithMessagesErrOnMissingHeartbeat of nats.go: true by default; when
+      #   false, it pulls again and keeps waiting.
       # @return [NATS::JetStream::MessagesContext]
       # @raise [ArgumentError] When an option is invalid.
       def messages(params = {})
