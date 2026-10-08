@@ -58,26 +58,31 @@ supports. The other gaps are oracle features that NQ also has only as
 
 ## Gaps closed after this audit
 
-The commits that follow the audit on this branch close these gaps, one
-commit per feature or fix. The rest of this report describes nats-pure.rb
-as it was audited, at `1b4cf34`.
+The commits that follow the audit on this branch close the gaps listed in
+this report, one commit per feature or fix. The rest of this report
+describes nats-pure.rb as it was audited, at `1b4cf34`.
 
 | Area | Closed by |
 | --- | --- |
-| Core NATS | `no_echo`; `connect_timeout` bounds the TCP dial and TLS handshake; reconnect jitter and `custom_reconnect_delay`; `reconnect_buf_size`; TLS `cert_file`/`key_file`/`ca_file` and `tls_handshake_first`; `token_handler`, `user_info_handler` and in-memory credentials; `on_connect`, `on_discovered_servers` and `on_lame_duck_mode`; specific server and client error classes; `rtt`; `set_server_pool`; connection and server-INFO introspection; `barrier`; `Subscription#drain`, `draining?`, `dropped` and `max_pending` |
-| JetStream | `purge_stream`; `delete_msg` and `secure_delete_msg`; stream and consumer listing; typed API and client errors; publish retry; `publish_async` with ack futures; fetch by bytes and with heartbeats; `consume` and `messages`; ordered consumers |
-| Key-Value | placement passed to the stream; update, create-or-update and list buckets; per-key TTLs and limit markers; `purge_deletes`; `updates_only` and `resume_from_revision`; err_code 10164 as a wrong last revision |
+| Core connection | `no_echo`; `connect_timeout` bounds the TCP dial and TLS handshake; reconnect jitter and `custom_reconnect_delay`; `reconnect_buf_size`; TLS `cert_file`/`key_file`/`ca_file` and `tls_handshake_first`; `token_handler`, `user_info_handler` and in-memory credentials; `on_connect`, `on_discovered_servers`, `on_lame_duck_mode` and `on_reconnect_error`; `custom_dialer`; `skip_host_lookup`; `write_buffer_size` and `flusher_timeout`; `ignore_auth_error_abort` and the abort on the same auth error twice; background `retry_on_failed_connect`; `no_callbacks_after_client_close`; specific server and client error classes |
+| Core API | `rtt`; `set_server_pool`; connection and server-INFO introspection; `barrier`; `NATS.new_inbox`; `Msg#==` and `Msg#size`; `Subscription#drain`, `draining?`, `dropped`, `max_pending`, `valid?`, `pending`, `queued_msgs` and pending limits after subscribe; message and subscription errors |
+| WebSocket | permessage-deflate compression; `ws_headers` and `ws_headers_handler`; `proxy_path` |
+| JetStream management | `purge_stream`; `delete_msg` and `secure_delete_msg`; stream and consumer listing; `create_or_update_stream`; `stream_info` subjects filter and deleted details; `Stream`, `Consumer` and `PushConsumer` handles; checks that the server applied settings; typed `account_info`; source and mirror `domain`; `client_trace`; typed API and client errors |
+| JetStream publishing | publish retry; `publish_async` with ack futures and `cleanup_publisher`; atomic batch and fast-ingest publishing (orbit.go `jetstreamext`); batched direct gets |
+| JetStream consuming | fetch by bytes and with heartbeats; `consume` and `messages`, with `stop_after` and `bytes_limit`; ordered consumers; push subscription heartbeats, flow control and sequence-mismatch reports |
+| JetStream data | sub-second consumer durations; `Time` start times and parsed time readers; `RawStreamMsg#time` and Integer direct-get sequences |
+| Key-Value | placement; update, create-or-update and list buckets; mirror and source buckets; per-key TTLs and limit markers; `purge_deletes`; `updates_only` and `resume_from_revision`; bucket validation and the remaining errors; entries with `created` and the put operation; `list_keys` and filtered keys; bucket status fields; `purge(last:)`; revision-mismatch errors; writes through a non-default API prefix |
 | Object Store | the whole API, checked against nats.go in both directions |
-| Services | error handler and `NATSError`, stop on close; `respond_json`; response headers; `control_subject` and the error header constants |
-| Batch publishing | atomic batch publishing and fast-ingest publishing (orbit.go `jetstreamext`) |
-| Fixes | `next_msg` on a callback subscription raises `SyncSubRequired`; `connected?` is true while draining; repeated header keys keep all values; pending async publishes fail when the connection is lost; one `ConsumerDeleted` error |
+| Services | error handler and `NATSError`, stop on close; `respond_json`; response headers; `control_subject` and the error header constants; a default endpoint; `queue_group_disabled`; endpoint pending limits; `ArgRequiredError` and `RespondError`; `:type`, `ping`, `reset` of the start time and name/version validation |
+| Fixes | `next_msg` on a callback subscription; `connected?` and `draining?` while and after draining; repeated header keys; `respond` and `respond_msg`; pending async publishes on a lost connection; one `ConsumerDeleted` error |
 
-Still open from the lists below: KV mirror/source buckets and the remaining
-KV error classes and status fields; the services default endpoint,
-queue-group-disabled flag, `ErrArgRequired` and `:type` in info and stats;
-batch direct get; `StopAfter` and `PullMaxMessagesWithBytesLimit`; WebSocket
-compression and connection headers; and the custom dialer, `skip_host_lookup`,
-write buffer size and flusher timeout options.
+What remains differs from nats.go on purpose, to keep existing behaviour,
+and each difference is noted in the CHANGELOG: `write_buffer_size` and
+`flusher_timeout` are off by default; resolved addresses are tried in
+resolver order, not shuffled; consumer `backoff` and `max_expires` stay in
+nanoseconds; fetch heartbeats are opt-in. Go-only idioms (functional option
+types, `context.Context` variants, channels) have no Ruby counterpart and are
+not ported.
 
 ## Missing features that the NQ Ruby client implements
 
