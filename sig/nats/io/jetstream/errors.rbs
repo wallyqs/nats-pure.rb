@@ -22,6 +22,9 @@ module NATS
       class InvalidConsumerName < NATS::JetStream::Error
       end
 
+      class MsgDeleteUnsuccessful < NATS::JetStream::Error
+      end
+
       class APIError < NATS::JetStream::Error
         attr_reader code: Integer
         attr_reader err_code: Integer
