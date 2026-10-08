@@ -3,6 +3,10 @@ module NATS
     extend Manager
     extend KeyValue::Manager
 
+    DEFAULT_PUB_RETRY_ATTEMPTS: Integer
+
+    DEFAULT_PUB_RETRY_WAIT: Float
+
     class PubAck < Struct[String | Numeric | bool]
     end
 
@@ -13,6 +17,10 @@ module NATS
     def pull_subscribe: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PullSubscription
 
     private
+
+    def pub_retry: (Hash[Symbol, untyped]) -> [Integer, Numeric]
+
+    def request_with_retry: (NATS::Msg, Numeric, Integer, Numeric) -> NATS::Msg
 
     def pub_ack: (NATS::Msg) -> NATS::JetStream::PubAck
 
