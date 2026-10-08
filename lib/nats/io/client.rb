@@ -409,6 +409,7 @@ module NATS
       opts[:verbose] = false if opts[:verbose].nil?
       opts[:pedantic] = false if opts[:pedantic].nil?
       opts[:reconnect] = true if opts[:reconnect].nil?
+      opts[:reconnect_on_flusher_error] = true if opts[:reconnect_on_flusher_error].nil?
       opts[:old_style_request] = false if opts[:old_style_request].nil?
       opts[:ignore_discovered_urls] = false if opts[:ignore_discovered_urls].nil?
       opts[:reconnect_time_wait] = NATS::IO::RECONNECT_TIME_WAIT if opts[:reconnect_time_wait].nil?
@@ -2395,11 +2396,16 @@ module NATS
       end
     end
 
+    # A failed write reconnects, unless reconnect_on_flusher_error is
+    # false, like ReconnectOnFlusherError of nats.go: then the error only
+    # goes to on_error, and the connection stays until the read loop or
+    # the pings find it gone. Either way the commands of the write are lost.
     def handle_flush_error(e)
       synchronize do
         @last_err = e
         err_cb_call(self, e, nil) if @err_cb
       end
+      return unless @options[:reconnect_on_flusher_error]
 
       process_op_error(e)
     end
