@@ -304,20 +304,22 @@ NATS.connect('tls://127.0.0.1:4444', tls_handshake_first: true, tls: {
 
 Since NATS Server v2.2 it is possible to connect to a NATS server [using WebSocket](https://docs.nats.io/running-a-nats-service/configuration/websocket).
 
- 1. Add a [`websocket`](https://github.com/imanel/websocket-ruby) gem to your Gemfile:
-
-    ```ruby
-    # Gemfile
-    gem 'websocket'
-    ```
-
- 2. Connect to WebSocket-enabled NATS Server using `ws` or `wss` protocol in URLs (for plain and secure connection respectively):
+ 1. Connect to WebSocket-enabled NATS Server using `ws` or `wss` protocol in URLs (for plain and secure connection respectively):
 
     ```ruby
     nats = NATS.connect("wss://demo.nats.io:8443")
     ```
 
- 3. Use NATS as usual.
+ 2. Use NATS as usual.
+
+The client no longer needs the `websocket` gem. With `compression: true` it
+asks the server to compress the messages both ways (permessage-deflate, for
+servers with `compression: true` in their `websocket` block), and goes on
+uncompressed when the server does not:
+
+```ruby
+nats = NATS.connect("ws://127.0.0.1:8080", compression: true)
+```
 
 ### NKEYS and JWT User Credentials
 

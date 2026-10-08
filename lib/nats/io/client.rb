@@ -2456,7 +2456,8 @@ module NATS
       socket_class.new(
         uri: @uri,
         tls: {context: tls_context, hostname: @hostname},
-        connect_timeout: @options[:connect_timeout]
+        connect_timeout: @options[:connect_timeout],
+        compression: @options[:compression]
       )
     end
 
