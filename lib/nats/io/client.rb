@@ -1318,6 +1318,9 @@ module NATS
       if @options[:ws_headers] && !@options[:ws_headers].is_a?(Hash)
         raise ArgumentError, "nats: ws_headers must be a Hash"
       end
+      if (dialer = @options[:custom_dialer]) && !dialer.respond_to?(:dial) && !dialer.respond_to?(:call)
+        raise ArgumentError, "nats: custom_dialer must respond to dial or call"
+      end
       if @options[:proxy_path] && !@options[:proxy_path].is_a?(String)
         raise ArgumentError, "nats: proxy_path must be a String"
       end
@@ -2474,7 +2477,8 @@ module NATS
         compression: @options[:compression],
         headers: @options[:ws_headers],
         headers_handler: @options[:ws_headers_handler],
-        proxy_path: @options[:proxy_path]
+        proxy_path: @options[:proxy_path],
+        dialer: @options[:custom_dialer]
       )
     end
 
@@ -2737,9 +2741,12 @@ module NATS
         @read_timeout = options[:read_timeout]
         @socket = nil
         @tls = options[:tls]
+        @dialer = options[:dialer]
       end
 
       def connect
+        return dial_custom if @dialer
+
         addrinfo = ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM)
         addrinfo.each_with_index do |ai, i|
           @socket = connect_addrinfo(ai, @uri.port, @connect_timeout)
@@ -2755,6 +2762,9 @@ module NATS
 
       # (Re-)connect using secure connection if server and client agreed on using it.
       def setup_tls!
+        # The custom dialer did the TLS handshake already.
+        return if skip_tls_handshake?
+
         # Setup TLS connection by rewrapping the socket
         tls_socket = OpenSSL::SSL::SSLSocket.new(@socket, @tls.fetch(:context))
 
@@ -2862,6 +2872,43 @@ module NATS
       # The TCP socket, also under TLS.
       def raw_socket
         @socket.respond_to?(:to_io) ? @socket.to_io : @socket
+      end
+
+      # Like nats.go, a dialer may tell with skip_tls_handshake? that the
+      # connections it makes are secure already.
+      def skip_tls_handshake?
+        @dialer.respond_to?(:skip_tls_handshake?) && @dialer.skip_tls_handshake?
+      end
+
+      # Connects with the custom dialer, like nats.go: to each address the
+      # host name resolves to in turn, or to the host name itself when it
+      # does not resolve, until one connects.
+      def dial_custom
+        hosts = begin
+          ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM).map { |ai| ai[3] }.uniq
+        rescue SocketError
+          []
+        end
+        hosts = [@uri.hostname] if hosts.empty?
+
+        hosts.each_with_index do |host, i|
+          @socket = if @dialer.respond_to?(:dial)
+            @dialer.dial(host, @uri.port, @connect_timeout)
+          else
+            @dialer.call(host, @uri.port, @connect_timeout)
+          end
+          raise NATS::IO::ConnectError.new("nats: custom dialer returned no connection") unless @socket
+
+          break
+        rescue => e
+          raise e if hosts.length == i + 1
+        end
+
+        begin
+          raw_socket.setsockopt(::Socket::IPPROTO_TCP, ::Socket::TCP_NODELAY, 1)
+        rescue NoMethodError, IOError, SystemCallError
+          # Not a TCP socket.
+        end
       end
 
       # Performs the TLS handshake, giving up after the connect timeout.
