@@ -336,6 +336,21 @@ module NATS
       # When the stream does not have the message.
       class MsgNotFound < NotFound; end
 
+      # When a subject that the client checks before asking the server is
+      # invalid: empty, starting or ending with a ".", with whitespace, or
+      # with a ">" before its end, like ErrInvalidSubject of nats.go. It is
+      # a NotFound, as looking a stream up by such a subject could be before.
+      class InvalidSubject < NotFound
+        def initialize(subject = nil)
+          reason = subject.to_s.empty? ? "subject cannot be empty" : subject
+          super({description: "nats: invalid subject name: #{reason}"})
+        end
+
+        def to_s
+          @description
+        end
+      end
+
       # When the stream is not found.
       class StreamNotFound < NotFound
         def initialize(params = {})

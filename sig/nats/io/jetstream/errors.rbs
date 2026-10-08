@@ -190,6 +190,12 @@ module NATS
       class MsgNotFound < NATS::JetStream::Error::NotFound
       end
 
+      class InvalidSubject < NATS::JetStream::Error::NotFound
+        def initialize: (?String?) -> void
+
+        def to_s: () -> String
+      end
+
       class StreamNotFound < NATS::JetStream::Error::NotFound
       end
 
