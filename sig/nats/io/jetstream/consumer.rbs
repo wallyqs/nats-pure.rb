@@ -38,6 +38,8 @@ module NATS
       def info: (?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
 
       def cached_info: () -> JetStream::API::ConsumerInfo
+
+      def consume: (?Hash[Symbol, untyped]) { (NATS::Msg) -> void } -> NATS::JetStream::PushConsumeContext
     end
   end
 end

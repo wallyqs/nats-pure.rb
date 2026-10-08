@@ -187,6 +187,10 @@ module NATS
       # or drained, or the connection closed.
       class MsgIteratorClosed < Error; end
 
+      # When a PushConsumer is consumed while it is consuming already, like
+      # ErrConsumerAlreadyConsuming of nats.go.
+      class ConsumerAlreadyConsuming < Error; end
+
       # When an ordered consumer that was read with fetch is read with
       # consume or messages.
       class OrderedConsumerUsedAsFetch < Error; end

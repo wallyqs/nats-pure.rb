@@ -95,9 +95,11 @@ module NATS
 
       # Starts taking the control messages of the consumer, and, with idle
       # heartbeats every heartbeat seconds, checks that the consumer is
-      # active.
-      def start_control(heartbeat)
+      # active. The errors go to on_error when given, or else to the error
+      # callback of the connection.
+      def start_control(heartbeat, on_error: nil)
         synchronize do
+          @js_on_error = on_error
           @js_ctrl = true
           @js_received = 0
           @js_delivered = 0
@@ -113,6 +115,20 @@ module NATS
           check_active(task)
         end
         @js_hb_task.execute
+      end
+
+      # stop_control stops checking that the consumer is active.
+      def stop_control
+        @js_hb_task&.shutdown
+      end
+
+      # js_report passes an error to on_error, or else to the error callback
+      # of the connection.
+      def js_report(err)
+        on_error = synchronize { @js_on_error }
+        return on_error.call(err) if on_error
+
+        @nc.synchronize { @nc.send(:err_cb_call, @nc, err, self) }
       end
 
       # A control message has an empty body and status 100: an idle
@@ -167,7 +183,7 @@ module NATS
           consumer_sequence: meta.sequence.consumer,
           last_consumer_sequence: ldseq.to_i
         )
-        @nc.synchronize { @nc.send(:err_cb_call, @nc, err, self) }
+        js_report(err)
       end
 
       # delivered! counts a message handed to the callback or returned by
@@ -202,8 +218,7 @@ module NATS
         active = synchronize { @js_active.tap { @js_active = false } }
         return if active
 
-        err = JetStream::Error::ConsumerNotActive.new("nats: consumer not active")
-        @nc.synchronize { @nc.send(:err_cb_call, @nc, err, self) }
+        js_report(JetStream::Error::ConsumerNotActive.new("nats: consumer not active"))
       rescue => e
         e
       end
