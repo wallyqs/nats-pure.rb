@@ -101,6 +101,19 @@ module NATS
         JetStream::API::StreamCreateResponse.new(result)
       end
 
+      # create_or_update_stream updates a stream with a given config, or
+      # creates it when it does not exist, like CreateOrUpdateStream of
+      # nats.go. As with update_stream, the config replaces the stream's.
+      # @param config [JetStream::API::StreamConfig] Configuration of the stream.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for each response.
+      # @return [JetStream::API::StreamCreateResponse] The result of updating or creating the Stream.
+      def create_or_update_stream(config, params = {})
+        update_stream(config, params.dup)
+      rescue JetStream::Error::StreamNotFound
+        add_stream(config, params.dup)
+      end
+
       # delete_stream deletes a stream.
       # @param stream [String] Name of the stream.
       # @param params [Hash] Options to customize API request.

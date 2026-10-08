@@ -7,6 +7,8 @@ module NATS
 
       def update_stream: (JetStream::API::StreamConfig, ?Hash[Symbol, untyped]) -> JetStream::API::StreamCreateResponse
 
+      def create_or_update_stream: (JetStream::API::StreamConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> JetStream::API::StreamCreateResponse
+
       def delete_stream: (String, ?Hash[Symbol, untyped]) -> bool
 
       def purge_stream: (String, ?Hash[Symbol, untyped]) -> JetStream::API::StreamPurgeResponse
