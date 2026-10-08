@@ -148,7 +148,7 @@ module NATS
           size = msg.subject.to_s.bytesize + msg.reply.to_s.bytesize + msg.data.to_s.bytesize
           return size if msg.header.nil? || msg.header.empty?
 
-          size + msg.header.sum("NATS/1.0\r\n\r\n".bytesize) { |k, v| "#{k}: #{v}\r\n".bytesize }
+          size + NATS::Msg.header_lines(msg.header).sum("NATS/1.0\r\n\r\n".bytesize, &:bytesize)
         end
 
         # from_error takes an API response that errored and maps the error

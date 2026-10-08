@@ -3,7 +3,11 @@ module NATS
     attr_reader subject: String
     attr_reader reply: String?
     attr_reader data: String
-    attr_reader header: String
+    attr_reader header: Hash[String, String | Array[String]]?
+
+    def self.add_header_value: (Hash[String, String | Array[String]], String, String) -> (String | Array[String])
+
+    def self.header_lines: (Hash[String, untyped]) -> Array[String]
 
     include NATS::JetStream::Msg::AckMethods
 

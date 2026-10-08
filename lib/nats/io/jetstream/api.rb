@@ -515,7 +515,7 @@ module NATS
               line.rstrip!
               next if line.empty?
               key, value = line.strip.split(/\s*:\s*/, 2)
-              hdr[key] = value
+              NATS::Msg.add_header_value(hdr, key, value)
             end
             opts[:headers] = hdr
           end

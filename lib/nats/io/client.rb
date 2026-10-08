@@ -557,9 +557,8 @@ module NATS
       if msg.header
         hdr = "".dup
         hdr << NATS_HDR_LINE
-        msg.header.each do |k, v|
-          hdr << "#{k}: #{v}#{CR_LF}"
-        end
+        # A name with an Array of values goes out once for each of them.
+        Msg.header_lines(msg.header).each { |line| hdr << line }
         hdr << CR_LF
         hdr_len = hdr.bytesize
         total_size = msg_size + hdr_len
@@ -1357,7 +1356,7 @@ module NATS
             line.rstrip!
             next if line.empty?
             key, value = line.strip.split(/\s*:\s*/, 2)
-            hdr[key] = value
+            Msg.add_header_value(hdr, key, value)
           end
         rescue => e
           e

@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- Headers: a header name that a message has more than once kept only its last value. Like the `http.Header` based headers of nats.go, received headers now give such a name an Array of its values, while names that come once keep a String; `publish`, `publish_msg`, `request` and `request_msg` take Array values, sending a line for each. This holds for core and JetStream messages, and for the headers of `jsm.get_msg`, also with `direct: true`.
 - `nc.connected?` was `false` while the connection drained. Like `IsConnected` of nats.go, it is now `true` until the drain closes the connection, as the connection still publishes and delivers messages; `draining?` tells the drain apart. As in nats.go, a connection that fails while draining still closes instead of reconnecting, and sends no keepalive PINGs.
 - `sub.next_msg` on a subscription with a callback raised `NoMethodError`. It now raises `NATS::IO::SyncSubRequired`, a `ClientError`, like `ErrSyncSubRequired` of nats.go.
 - KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
