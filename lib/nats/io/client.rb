@@ -1079,6 +1079,22 @@ module NATS
       connected_server_info(:cluster)
     end
 
+    # The JetStream domain of the connected server, like ConnectedDomain of
+    # nats.go.
+    # @return [String, nil] nil unless connected, or when the server has no
+    #   JetStream domain.
+    def connected_domain
+      connected_server_info(:domain)
+    end
+
+    # Whether the account of the connection is the system account, like
+    # IsSystemAccount of nats.go. The server tells it in the INFO that
+    # follows the connect.
+    # @return [Boolean] false unless connected.
+    def system_account?
+      !!connected_server_info(:acc_is_sys)
+    end
+
     # The id that the server gave the connection, like GetClientID of
     # nats.go. It may change when the connection reconnects.
     # @return [Integer, nil] nil when the server does not tell it.
