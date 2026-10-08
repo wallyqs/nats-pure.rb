@@ -667,6 +667,71 @@ module NATS
       Stream.new(self, stream, nil).push_consumer(name, params)
     end
 
+    # create_or_update_consumer creates a pull consumer of a stream, or
+    # updates it, and returns a handle to it, like CreateOrUpdateConsumer of
+    # the nats.go jetstream package. To get the ConsumerInfo instead, as
+    # create_consumer and update_consumer of the context return, use
+    # {Manager#add_consumer}; {Stream#create_consumer} and
+    # {Stream#update_consumer} return handles.
+    #
+    # @example Create a consumer and fetch its messages.
+    #
+    #   consumer = js.create_or_update_consumer("ORDERS", durable_name: "processor")
+    #   consumer.fetch(10).each(&:ack)
+    #
+    # @param stream [String] Name of the stream.
+    # @param config [JetStream::API::ConsumerConfig, Hash] Configuration of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::Consumer]
+    def create_or_update_consumer(stream, config, params = {})
+      Stream.new(self, stream, nil).create_or_update_consumer(config, params)
+    end
+
+    # create_push_consumer creates a push consumer of a stream, which needs
+    # a deliver_subject, and returns a handle to it, like CreatePushConsumer
+    # of the nats.go jetstream package. Creating one that exists with the
+    # same config succeeds; one with another config raises
+    # ConsumerAlreadyExists.
+    #
+    # @example Create a push consumer and consume its messages.
+    #
+    #   consumer = js.create_push_consumer("ORDERS", durable_name: "dispatcher",
+    #     deliver_subject: "deliver.orders")
+    #   cc = consumer.consume { |msg| msg.ack }
+    #
+    # @param stream [String] Name of the stream.
+    # @param config [JetStream::API::ConsumerConfig, Hash] Configuration of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::PushConsumer]
+    # @raise [NATS::JetStream::Error::NotPushConsumer] When the config has no deliver_subject.
+    def create_push_consumer(stream, config, params = {})
+      Stream.new(self, stream, nil).create_push_consumer(config, params)
+    end
+
+    # update_push_consumer updates a push consumer of a stream, and returns
+    # a handle to it, like UpdatePushConsumer of the nats.go jetstream
+    # package. A consumer that does not exist raises ConsumerDoesNotExist.
+    # @param stream [String] Name of the stream.
+    # @param config [JetStream::API::ConsumerConfig, Hash] Configuration of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::PushConsumer]
+    # @raise [NATS::JetStream::Error::NotPushConsumer] When the config has no deliver_subject.
+    def update_push_consumer(stream, config, params = {})
+      Stream.new(self, stream, nil).update_push_consumer(config, params)
+    end
+
+    # create_or_update_push_consumer creates a push consumer of a stream,
+    # or updates it, and returns a handle to it, like
+    # CreateOrUpdatePushConsumer of the nats.go jetstream package.
+    # @param stream [String] Name of the stream.
+    # @param config [JetStream::API::ConsumerConfig, Hash] Configuration of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::PushConsumer]
+    # @raise [NATS::JetStream::Error::NotPushConsumer] When the config has no deliver_subject.
+    def create_or_update_push_consumer(stream, config, params = {})
+      Stream.new(self, stream, nil).create_or_update_push_consumer(config, params)
+    end
+
     private
 
     # sync_publish publishes a message and waits for its ack.
