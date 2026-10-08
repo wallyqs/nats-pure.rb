@@ -12,6 +12,31 @@ module NATS
 
     class InvalidSubjectError < Error; end
 
+    # NATSError is passed to the error handler of a service when one of the
+    # service's subscriptions reports an asynchronous error, like a slow
+    # consumer or a NATS error raised in an endpoint handler, like the
+    # NATSError of nats.go micro. The subject links it to an endpoint, or to
+    # a monitoring subject.
+    class NATSError < Error
+      attr_reader :subject, :description, :error
+
+      def initialize(subject, description, error = nil)
+        @subject = subject
+        @description = description
+        @error = error
+        super("#{subject.inspect}: #{description}")
+      end
+
+      def ==(other)
+        other.is_a?(NATSError) && subject == other.subject && description == other.description
+      end
+      alias_method :eql?, :==
+
+      def hash
+        [self.class, subject, description].hash
+      end
+    end
+
     class ErrorWrapper
       attr_reader :code, :message, :data
 

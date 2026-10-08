@@ -44,6 +44,11 @@ module NATS
         @monitors.nil?
       end
 
+      # Whether sub is one of the monitoring subscriptions.
+      def subscribed?(sub)
+        !!@monitors&.any? { |monitor| monitor.equal?(sub) }
+      end
+
       private
 
       def setup_monitors

@@ -1,0 +1,9 @@
+module NATS
+  class Service
+    def on_error: () { (NATS::Service, NATS::Service::NATSError) -> void } -> void
+
+    def stopped?: () -> bool
+
+    def stop: (?Exception?) -> void
+  end
+end

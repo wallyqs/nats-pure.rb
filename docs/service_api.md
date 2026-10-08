@@ -31,6 +31,8 @@ This name can only contain A-Z, a-z, 0-9, dash, and underscore.
 - `:description` (optional) - a human-readable description about a service.
 - `:metadata` (optional) - a hash that holds additional information about a service.
 - `:queue` (optional) - a queue group.
+- `:error_handler` (optional) - a callable that receives the service and a
+`NATS::Service::NATSError` when one of the service's subscriptions fails (see [Service Lifecycle](#service-lifecycle)).
 
 While multiple service instances can share the same name, each service has a unique id that is generated upon its creation:
 
@@ -154,7 +156,9 @@ If your service finishes its job, you can stop it and drain all its subscription
 service.stop
 ```
 
-The service is automatically stopped whenever a NATS-related error occurs during service work. 
+The service is automatically stopped whenever a NATS-related error occurs during service work,
+like a `NATS::Error` raised in an endpoint or a slow consumer on one of the service's subscriptions,
+and when its connection is closed.
 You can use `on_stop` callback to handle the error and gracefully finish the service work:
 
 ```ruby
@@ -169,6 +173,20 @@ end
 client.request("error")
 # Server stopped due to NATS::IO::ServerError
 ```
+
+Before the service stops on an error, its error handler, set with the `:error_handler`
+option or with `on_error`, receives the service and a `NATS::Service::NATSError`, which
+names the `subject` of the failed subscription and the `description` of the error
+(the original exception is its `error`). The error is also counted in the stats of the
+endpoint, and passed on to the client's `on_error` callback:
+
+```ruby
+service.on_error do |service, error|
+  puts "#{service.name} failed on #{error.subject}: #{error.description}"
+end
+```
+
+Errors on subscriptions that are not the service's are left to the client.
 
 ## Error Handling
 

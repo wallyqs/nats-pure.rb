@@ -1238,6 +1238,9 @@ module NATS
     end
 
     def err_cb_call(nc, e, sub)
+      # Services stop on the errors of their subscriptions, like nats.go micro.
+      @_services&.send(:handle_async_error, e, sub) if sub
+
       return unless @err_cb
 
       cb = @err_cb
@@ -1663,6 +1666,9 @@ module NATS
           @io = nil
         end
       end
+
+      # Like nats.go micro, services stop once their connection is closed.
+      @_services&.send(:stop_all) if do_cbs
     end
 
     # Asks the read loop, flusher and ping threads to stop, wakes them from
