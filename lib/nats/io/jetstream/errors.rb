@@ -244,9 +244,15 @@ module NATS
       # When JetStream is not enabled for the account.
       class JetStreamNotEnabledForAccount < ServiceUnavailable; end
 
-      # When the consumer of a pull was deleted.
+      # When the consumer of a pull was deleted, which ends fetches and
+      # consumption.
       # This condition is represented with a message that has 409 status code header.
-      class ConsumerDeleted < APIError; end
+      class ConsumerDeleted < APIError
+        def initialize(params = {})
+          super
+          @code ||= "409"
+        end
+      end
 
       # When the consumer of a pull got another leader, which does not
       # have the pull.
@@ -266,15 +272,6 @@ module NATS
         def initialize(params = {})
           super
           @code ||= 423
-        end
-      end
-
-      # When the server ended a pull as its consumer was deleted.
-      # This condition is represented with a message that has 409 status code header.
-      class ConsumerDeleted < APIError
-        def initialize(params = {})
-          super
-          @code ||= 409
         end
       end
 
