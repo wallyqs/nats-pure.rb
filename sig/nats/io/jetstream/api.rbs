@@ -23,6 +23,32 @@ module NATS
       class ConsumerResetResponse < Struct[NATS::JetStream::API::ConsumerInfo | Integer]
       end
 
+      module HashAccess
+        def []: (Symbol | String | Integer) -> untyped
+
+        def to_h: () -> Hash[Symbol, untyped]
+
+        def self.plain: (untyped) -> untyped
+
+        def self.filter: (Hash[Symbol, untyped], Array[Symbol]) -> Hash[Symbol, untyped]
+      end
+
+      class AccountLimits < Struct[Integer | bool]
+        include HashAccess
+      end
+
+      class APIStats < Struct[Integer]
+        include HashAccess
+      end
+
+      class Tier < Struct[Integer | NATS::JetStream::API::AccountLimits]
+        include HashAccess
+      end
+
+      class AccountInfo < Struct[String | Integer | NATS::JetStream::API::AccountLimits | NATS::JetStream::API::APIStats | Hash[String, NATS::JetStream::API::Tier]]
+        include HashAccess
+      end
+
       class StreamConfig < Struct[String | Hash[Symbol, untyped] | NATS::JetStream::API::StreamState | bool | Integer]
         def to_json: (*Hash[untyped, untyped]) -> String
       end

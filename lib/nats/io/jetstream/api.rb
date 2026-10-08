@@ -241,6 +241,174 @@ module NATS
         end
       end
 
+      # HashAccess lets the Structs of a response that was a Hash, with
+      # Symbol keys, still be read as that Hash: with [], dig and to_h.
+      # @!visibility private
+      module HashAccess
+        # [] returns nil for a key that is not a member, as a Hash does.
+        def [](key)
+          return nil if (key.is_a?(Symbol) || key.is_a?(String)) && !members.include?(key.to_sym)
+
+          super
+        end
+
+        # to_h returns the Hash that the response was, with the nested
+        # Structs as Hashes too, and without what the server left out.
+        def to_h(&block)
+          return super if block
+
+          each_pair.with_object({}) do |(key, value), hash|
+            hash[key] = HashAccess.plain(value) unless value.nil?
+          end
+        end
+
+        # @!visibility private
+        def self.plain(value)
+          case value
+          when HashAccess then value.to_h
+          when Hash then value.to_h { |key, val| [key.to_sym, plain(val)] }
+          else value
+          end
+        end
+
+        # @!visibility private
+        def self.filter(opts, members)
+          opts.slice(*members)
+        end
+      end
+
+      # AccountLimits are the JetStream limits of an account, or of one of
+      # its tiers, like AccountLimits of nats.go; -1 is no limit.
+      #
+      # @!attribute max_memory
+      #   @return [Integer] Most bytes of memory storage.
+      # @!attribute max_storage
+      #   @return [Integer] Most bytes of file storage.
+      # @!attribute max_streams
+      #   @return [Integer] Most streams.
+      # @!attribute max_consumers
+      #   @return [Integer] Most consumers.
+      # @!attribute max_ack_pending
+      #   @return [Integer] Most messages that a consumer may have awaiting acks.
+      # @!attribute memory_max_stream_bytes
+      #   @return [Integer] Most bytes of a memory stream.
+      # @!attribute storage_max_stream_bytes
+      #   @return [Integer] Most bytes of a file stream.
+      # @!attribute max_bytes_required
+      #   @return [Boolean] Whether streams have to set max_bytes.
+      AccountLimits = Struct.new(:max_memory, :max_storage, :max_streams,
+        :max_consumers, :max_ack_pending, :memory_max_stream_bytes,
+        :storage_max_stream_bytes, :max_bytes_required,
+        keyword_init: true) do
+        include HashAccess
+
+        def initialize(opts = {})
+          super(**HashAccess.filter(opts, members))
+          freeze
+        end
+      end
+
+      # APIStats are the stats of the JetStream API of the server, like
+      # APIStats of nats.go.
+      #
+      # @!attribute level
+      #   @return [Integer] The API level of the server (nats-server v2.11.0 and later).
+      # @!attribute total
+      #   @return [Integer] API requests received.
+      # @!attribute errors
+      #   @return [Integer] API requests that got an error response.
+      # @!attribute inflight
+      #   @return [Integer, nil] API requests being served.
+      APIStats = Struct.new(:level, :total, :errors, :inflight,
+        keyword_init: true) do
+        include HashAccess
+
+        def initialize(opts = {})
+          super(**HashAccess.filter(opts, members))
+          freeze
+        end
+      end
+
+      # Tier is the JetStream usage and limits of an account in one tier,
+      # such as that of the streams with 3 replicas, like Tier of nats.go.
+      #
+      # @!attribute memory
+      #   @return [Integer] Bytes of memory storage used.
+      # @!attribute storage
+      #   @return [Integer] Bytes of file storage used.
+      # @!attribute reserved_memory
+      #   @return [Integer] Bytes of memory storage reserved by the max_bytes of streams.
+      # @!attribute reserved_storage
+      #   @return [Integer] Bytes of file storage reserved by the max_bytes of streams.
+      # @!attribute streams
+      #   @return [Integer] Number of streams.
+      # @!attribute consumers
+      #   @return [Integer] Number of consumers.
+      # @!attribute limits
+      #   @return [AccountLimits]
+      Tier = Struct.new(:memory, :storage, :reserved_memory, :reserved_storage,
+        :streams, :consumers, :limits,
+        keyword_init: true) do
+        include HashAccess
+
+        def initialize(opts = {})
+          opts = HashAccess.filter(opts, members)
+          opts[:limits] = AccountLimits.new(opts[:limits]) if opts[:limits].is_a?(Hash)
+          super(**opts)
+          freeze
+        end
+      end
+
+      # AccountInfo is the JetStream usage and limits of the account, like
+      # AccountInfo of nats.go. It reads as the Hash that account_info
+      # returned before, too: account_info[:limits][:max_streams],
+      # account_info.dig(:api, :level) and account_info.to_h work.
+      #
+      # @!attribute type
+      #   @return [String]
+      # @!attribute memory
+      #   @return [Integer] Bytes of memory storage used.
+      # @!attribute storage
+      #   @return [Integer] Bytes of file storage used.
+      # @!attribute reserved_memory
+      #   @return [Integer] Bytes of memory storage reserved by the max_bytes of streams.
+      # @!attribute reserved_storage
+      #   @return [Integer] Bytes of file storage reserved by the max_bytes of streams.
+      # @!attribute streams
+      #   @return [Integer] Number of streams.
+      # @!attribute consumers
+      #   @return [Integer] Number of consumers.
+      # @!attribute limits
+      #   The limits of the account; with tiers, those are in the tiers.
+      #   @return [AccountLimits]
+      # @!attribute domain
+      #   @return [String, nil] JetStream domain of the server.
+      # @!attribute api
+      #   @return [APIStats]
+      # @!attribute tiers
+      #   Usage and limits per tier, by name, such as "R1" and "R3", with
+      #   tiered limits only. Symbols work as names too.
+      #   @return [Hash{String => Tier}, nil]
+      AccountInfo = Struct.new(:type, :memory, :storage, :reserved_memory,
+        :reserved_storage, :streams, :consumers, :limits, :domain, :api, :tiers,
+        keyword_init: true) do
+        include HashAccess
+
+        def initialize(opts = {})
+          opts = HashAccess.filter(opts, members)
+          opts[:limits] = AccountLimits.new(opts[:limits]) if opts[:limits].is_a?(Hash)
+          opts[:api] = APIStats.new(opts[:api]) if opts[:api].is_a?(Hash)
+          if opts[:tiers].is_a?(Hash)
+            # The names are keys of a JSON object, which come as Symbols.
+            tiers = Hash.new { |hash, name| hash.fetch(name.to_s, nil) if name.is_a?(Symbol) }
+            opts[:tiers].each { |name, tier| tiers[name.to_s] = Tier.new(tier) }
+            opts[:tiers] = tiers.freeze
+          end
+          super(**opts)
+          freeze
+        end
+      end
+
       # StreamConfig represents the configuration of a stream from JetStream.
       #
       # Settings left nil are not sent, and neither are the settings of

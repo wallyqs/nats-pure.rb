@@ -477,8 +477,13 @@ module NATS
         get_msg(stream_name, params)
       end
 
-      def account_info
-        api_request("#{@prefix}.INFO")
+      # account_info gets the JetStream usage and limits of the account,
+      # like AccountInfo of nats.go.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::AccountInfo]
+      def account_info(params = {})
+        JetStream::API::AccountInfo.new(api_request("#{@prefix}.INFO", "", params))
       end
 
       private
