@@ -95,7 +95,13 @@ module NATS
     @user_jwt_cb: Proc?
     @signature_cb: Proc?
 
+    @user_credentials_data: String?
+    @user_jwt: String?
+    @user_seed: String?
+
     @auth_token: String?
+    @token_handler: Proc?
+    @user_info_handler: Proc?
 
     @inbox_prefix: String
 
@@ -156,6 +162,8 @@ module NATS
     alias jsm jetstream
 
     private
+
+    def validate_auth_options!: () -> void
 
     def validate_settings!: () -> void
 
@@ -240,6 +248,10 @@ module NATS
     def jwt_cb_for_creds_file: (String) -> Proc
 
     def signature_cb_for_creds_file: (String) -> Proc
+
+    def creds_section: (Array[String], String) -> String?
+
+    def signature_cb_for_seed: (String) -> Proc
 
     def process_uri: (String) -> Array[URI::Generic]
   end
