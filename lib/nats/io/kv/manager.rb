@@ -38,12 +38,82 @@ module NATS
         )
       end
 
+      # create_key_value creates a KeyValue bucket, like CreateKeyValue of nats.go.
+      # @param config [KeyValue::API::KeyValueConfig, Hash, String] Configuration of the bucket, or its name.
+      # @return [KeyValue]
       def create_key_value(config)
+        stream = key_value_stream_config(config)
+        si = add_stream(stream)
+        key_value_for(si.config, config_validate_keys(config))
+      end
+
+      # update_key_value changes the configuration of an existing bucket,
+      # like UpdateKeyValue of nats.go. The config replaces the bucket's, so
+      # settings left out take their defaults.
+      # @param config [KeyValue::API::KeyValueConfig, Hash] New configuration of the bucket.
+      # @return [KeyValue]
+      # @raise [KeyValue::BucketNotFoundError] When the bucket does not exist.
+      def update_key_value(config)
+        stream = key_value_stream_config(config)
+        si = begin
+          update_stream(stream)
+        rescue NATS::JetStream::Error::StreamNotFound
+          raise BucketNotFoundError.new("nats: bucket not found: #{stream.name.delete_prefix("KV_")}")
+        end
+        key_value_for(si.config, config_validate_keys(config))
+      end
+
+      # create_or_update_key_value creates a bucket, or changes the
+      # configuration of the bucket if it exists, like
+      # CreateOrUpdateKeyValue of nats.go.
+      # @param config [KeyValue::API::KeyValueConfig, Hash] Configuration of the bucket.
+      # @return [KeyValue]
+      def create_or_update_key_value(config)
+        stream = key_value_stream_config(config)
+        si = begin
+          update_stream(stream)
+        rescue NATS::JetStream::Error::StreamNotFound
+          add_stream(stream)
+        end
+        key_value_for(si.config, config_validate_keys(config))
+      end
+
+      # key_value_store_names returns the names of the KeyValue buckets,
+      # like KeyValueStoreNames of nats.go: those of the streams named KV_*
+      # that take the subjects of a bucket.
+      # @return [Array<String>]
+      def key_value_store_names
+        kv_stream_pages("#{@prefix}.STREAM.NAMES").filter_map do |name|
+          name.delete_prefix("KV_") if name.start_with?("KV_")
+        end
+      end
+
+      # key_value_stores returns the status of each KeyValue bucket, like
+      # KeyValueStores of nats.go.
+      # @return [Array<KeyValue::BucketStatus>]
+      def key_value_stores
+        kv_stream_pages("#{@prefix}.STREAM.LIST").filter_map do |info|
+          name = info[:config][:name]
+          next unless name.start_with?("KV_")
+
+          BucketStatus.new(JetStream::API::StreamInfo.new(info), name.delete_prefix("KV_"))
+        end
+      end
+
+      def delete_key_value(bucket)
+        delete_stream("KV_#{bucket}")
+      end
+
+      private
+
+      # key_value_stream_config makes the config of the stream of a bucket.
+      def key_value_stream_config(config)
         config = if !config.is_a?(KeyValue::API::KeyValueConfig)
           config = {bucket: config} if config.is_a?(String)
           KeyValue::API::KeyValueConfig.new(config)
         else
-          config
+          # Work on a copy, which the defaults below change.
+          config.dup
         end
         config.history ||= 1
         config.replicas ||= 1
@@ -63,7 +133,7 @@ module NATS
           raise ArgumentError.new("nats: compression must be true or false")
         end
 
-        stream = JetStream::API::StreamConfig.new(
+        JetStream::API::StreamConfig.new(
           name: "KV_#{config.bucket}",
           description: config.description,
           subjects: ["$KV.#{config.bucket}.>"],
@@ -85,20 +155,37 @@ module NATS
           compression: config.compression ? "s2" : nil,
           metadata: config.metadata
         )
+      end
 
-        si = add_stream(stream)
+      def config_validate_keys(config)
+        config.is_a?(String) ? nil : config[:validate_keys]
+      end
+
+      # key_value_for makes the KeyValue of the bucket of a stream.
+      def key_value_for(stream_config, validate_keys)
+        bucket = stream_config.name.delete_prefix("KV_")
         KeyValue.new(
-          name: config.bucket,
-          stream: stream.name,
-          pre: "$KV.#{config.bucket}.",
+          name: bucket,
+          stream: stream_config.name,
+          pre: "$KV.#{bucket}.",
           js: self,
-          direct: si.config.allow_direct,
-          validate_keys: config.validate_keys
+          direct: stream_config.allow_direct,
+          validate_keys: validate_keys
         )
       end
 
-      def delete_key_value(bucket)
-        delete_stream("KV_#{bucket}")
+      # kv_stream_pages pages through the names or infos of the streams
+      # that take the subjects of a bucket.
+      def kv_stream_pages(req_subject)
+        items = []
+        loop do
+          req = {subject: "$KV.*.>", offset: items.size}
+          result = api_request(req_subject, req.to_json)
+          page = result[:streams] || []
+          items.concat(page)
+          break if page.empty? || items.size >= result[:total].to_i
+        end
+        items
       end
     end
   end
