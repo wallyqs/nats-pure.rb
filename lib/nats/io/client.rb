@@ -53,7 +53,48 @@ module NATS
 
       nc
     end
+
+    # NATS.new_inbox returns a unique subject to receive replies on, like
+    # NewInbox of nats.go: the prefix, a dot and a NUID, as nc.new_inbox
+    # does with the custom_inbox_prefix of its connection.
+    # @param prefix [String] The prefix, "_INBOX" by default; it takes the
+    #   prefixes that the custom_inbox_prefix option takes.
+    # @return [String]
+    # @raise [NATS::IO::ClientError] When the prefix is not valid.
+    #
+    # @example
+    #   NATS.new_inbox # => "_INBOX.Wm3Ea9Q3UqcItKOMN6ALrs"
+    #
+    def new_inbox(prefix = NATS::IO::DEFAULT_INBOX_PREFIX)
+      check_inbox_prefix!(prefix) unless prefix == NATS::IO::DEFAULT_INBOX_PREFIX
+
+      nuid = INBOX_NUID_LOCK.synchronize do
+        # A forked process takes a NUID of its own, not to repeat the inboxes
+        # of its parent.
+        if @inbox_nuid_pid != Process.pid
+          @inbox_nuid = NATS::NUID.new
+          @inbox_nuid_pid = Process.pid
+        end
+        @inbox_nuid.next
+      end
+      "#{prefix}.#{nuid}"
+    end
+
+    private
+
+    # Checks an inbox prefix, like the CustomInboxPrefix option of nats.go.
+    def check_inbox_prefix!(prefix)
+      prefix = prefix.to_s
+      raise(NATS::IO::ClientError, "custom inbox may not be empty") if prefix.empty?
+      raise(NATS::IO::ClientError, "custom inbox may not include '>'") if prefix.include?(">")
+      raise(NATS::IO::ClientError, "custom inbox may not include '*'") if prefix.include?("*")
+      raise(NATS::IO::ClientError, "custom inbox may not end in '.'") if prefix.end_with?(".")
+      raise(NATS::IO::ClientError, "custom inbox may not begin with '.'") if prefix.start_with?(".")
+    end
   end
+
+  INBOX_NUID_LOCK = Mutex.new
+  private_constant :INBOX_NUID_LOCK
 
   # Status represents the different states from a NATS connection.
   # A client starts from the DISCONNECTED state to CONNECTING during
@@ -268,7 +309,7 @@ module NATS
       # Callback that returns the user and password.
       @user_info_handler = nil
 
-      @inbox_prefix = "_INBOX"
+      @inbox_prefix = NATS::IO::DEFAULT_INBOX_PREFIX
 
       # Draining
       @drain_t = nil
@@ -1267,10 +1308,7 @@ module NATS
         raise ArgumentError, "nats: custom_reconnect_delay must respond to call"
       end
 
-      raise(NATS::IO::ClientError, "custom inbox may not include '>'") if @inbox_prefix.include?(">")
-      raise(NATS::IO::ClientError, "custom inbox may not include '*'") if @inbox_prefix.include?("*")
-      raise(NATS::IO::ClientError, "custom inbox may not end in '.'") if @inbox_prefix.end_with?(".")
-      raise(NATS::IO::ClientError, "custom inbox may not begin with '.'") if @inbox_prefix.start_with?(".")
+      NATS.send(:check_inbox_prefix!, @inbox_prefix)
     end
 
     def process_info(line)
@@ -2637,6 +2675,9 @@ module NATS
         end
       end
     end
+
+    # The prefix of the subjects of new_inbox, like InboxPrefix of nats.go.
+    DEFAULT_INBOX_PREFIX = "_INBOX"
 
     # Default Pending Limits
     DEFAULT_SUB_PENDING_MSGS_LIMIT = 65536
