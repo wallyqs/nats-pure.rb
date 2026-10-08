@@ -203,7 +203,7 @@ module NATS
             client.connect if was_connected
           else
             client.send(:err_cb_call, self, NATS::IO::ForkDetectedError, nil)
-            client.close
+            client.send(:close_with_callbacks)
           end
         rescue => e
           warn "nats: Error during handling after_fork callback: #{e}" # TODO: Report as async error via error callback?
@@ -983,8 +983,12 @@ module NATS
     # Close connection to NATS, flushing in case connection is alive
     # and there are any pending messages, should not be used while
     # holding the lock.
+    #
+    # With the no_callbacks_after_client_close option, on_disconnect and
+    # on_close are not called, like NoCallbacksAfterClientClose of nats.go.
     def close
-      close_connection(CLOSED, true)
+      user_cbs = !(@options && @options[:no_callbacks_after_client_close])
+      close_connection(CLOSED, true, user_cbs: user_cbs)
     end
 
     # new_inbox returns a unique inbox used for subscriptions.
@@ -1864,7 +1868,7 @@ module NATS
 
       # Remove resp mux handler in case there is one.
       unsubscribe(@resp_sub) if @resp_sub
-      close
+      close_with_callbacks
     end
 
     def send_flush_queue(s)
@@ -2017,7 +2021,7 @@ module NATS
       end
 
       # Otherwise close the connection to NATS
-      close
+      close_with_callbacks
     end
 
     # Leaves the connection reconnecting, buffering what is published and
@@ -2041,7 +2045,7 @@ module NATS
         attempt_reconnect(generation, initial: true)
       rescue NATS::IO::NoServersError => e
         @last_err = e
-        close
+        close_with_callbacks
       end
     end
 
@@ -2072,7 +2076,7 @@ module NATS
         attempt_reconnect(generation)
       rescue NATS::IO::NoServersError => e
         @last_err = e
-        close
+        close_with_callbacks
       end
     end
 
@@ -2352,7 +2356,16 @@ module NATS
       synchronize { @close_generation != generation }
     end
 
-    def close_connection(conn_status, do_cbs = true)
+    # Closes the connection without regard to no_callbacks_after_client_close,
+    # as the client does when it gives up on the connection.
+    def close_with_callbacks
+      close_connection(CLOSED, true)
+    end
+
+    # do_cbs is whether to notify the subscriptions and the internal
+    # listeners that the connection closed, and user_cbs whether to call
+    # on_disconnect and on_close as well.
+    def close_connection(conn_status, do_cbs = true, user_cbs: do_cbs)
       synchronize do
         @connect_called = false
         if @status == CLOSED
@@ -2397,7 +2410,7 @@ module NATS
         closed_subs = @subs.values
         @subs.clear
 
-        if do_cbs
+        if do_cbs && user_cbs
           @disconnect_cb&.call(@last_err)
           @close_cb&.call
         end

@@ -340,7 +340,9 @@ module NATS
 
     def attempt_reconnect: (Integer, ?initial: bool) -> void
 
-    def close_connection: (Integer, bool) -> void
+    def close_with_callbacks: () -> void
+
+    def close_connection: (Integer, ?bool, ?user_cbs: bool) -> void
 
     def start_threads!: () -> void
 
