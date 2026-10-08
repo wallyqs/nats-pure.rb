@@ -49,6 +49,9 @@ module NATS
       class PublisherClosed < NATS::JetStream::Error
       end
 
+      class AsyncPublishReplySubjectSet < NATS::JetStream::Error
+      end
+
       class NoHeartbeat < NATS::JetStream::Error
       end
 

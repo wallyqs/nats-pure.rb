@@ -172,14 +172,26 @@ module NATS
     #   the subject, after the retries.
     # @return [PubAck] The pub ack response.
     def publish(subject, payload = "", **params)
-      params[:timeout] ||= @opts[:timeout]
-      retry_attempts, retry_wait = pub_retry(params)
-      # Send message with headers.
-      msg = NATS::Msg.new(subject: subject,
-        data: payload,
-        header: publish_header(params))
+      sync_publish(subject, payload, params[:header], params)
+    end
 
-      pub_ack(request_with_retry(msg, params[:timeout], retry_attempts, retry_wait))
+    # publish_msg produces a NATS::Msg for JetStream, with its subject, data
+    # and header, and waits for its ack, like PublishMsg of nats.go. The
+    # message is not changed: the options add to a copy of its header, and
+    # its reply is not used.
+    #
+    # @example
+    #   msg = NATS::Msg.new(subject: "orders.new", data: "order", header: {"Kind" => "new"})
+    #   ack = js.publish_msg(msg, stream: "ORDERS")
+    #
+    # @param msg [NATS::Msg] The message to publish to a subject of a stream.
+    # @param params [Hash] The options of publish, except :header.
+    # @raise [TypeError] When msg is not a NATS::Msg.
+    # @raise [ArgumentError] When an option is invalid, before the message is sent.
+    # @return [PubAck] The pub ack response.
+    def publish_msg(msg, **params)
+      check_publish_msg(msg, params)
+      sync_publish(msg.subject, msg.data, msg.header, params)
     end
 
     # publish_async publishes a message for JetStream without waiting for
@@ -214,23 +226,36 @@ module NATS
     #   not published.
     # @return [PubAckFuture]
     def publish_async(subject, payload = "", **params)
-      retry_attempts, retry_wait = pub_retry(params)
-      timeout = params.fetch(:timeout) { @opts[:publish_async_timeout] }
-      stall_wait = params.fetch(:stall_wait) { @opts.fetch(:publish_async_stall_wait, DEFAULT_PUB_ASYNC_STALL_WAIT) }
-      positive_seconds!(:timeout, timeout) unless timeout.nil?
-      positive_seconds!(:stall_wait, stall_wait)
-      header = publish_header(params)
+      async_publish(subject, payload, params[:header], params)
+    end
 
-      @async_mon.synchronize do
-        start_async_reply_sub unless @async_sub
-        @async_tokens += 1
-        msg = NATS::Msg.new(subject: subject, reply: "#{@async_prefix}#{@async_tokens.to_s(36)}",
-          data: payload, header: header)
-        future = PubAckFuture.new(msg, retry_attempts: retry_attempts, retry_wait: retry_wait, timeout: timeout)
-        @async_acks[msg.reply] = future
-        stall_async_publish(msg.reply, stall_wait)
-        publish_async_msg(future)
+    # publish_msg_async publishes a NATS::Msg for JetStream, with its
+    # subject, data and header, without waiting for its ack, like
+    # PublishMsgAsync of nats.go, and returns a future for the ack, as
+    # publish_async does. The message is not changed: the options add to a
+    # copy of its header, which the future's msg has.
+    #
+    # @example
+    #   future = js.publish_msg_async(NATS::Msg.new(subject: "orders.new", data: "order"))
+    #   future.wait(5)
+    #
+    # @param msg [NATS::Msg] The message to publish to a subject of a stream,
+    #   which cannot have a reply, as the reply subject gets the ack.
+    # @param params [Hash] The options of publish_async, except :header.
+    # @raise [TypeError] When msg is not a NATS::Msg.
+    # @raise [NATS::JetStream::Error::AsyncPublishReplySubjectSet] When the
+    #   message has a reply, like ErrAsyncPublishReplySubjectSet of nats.go.
+    # @raise [ArgumentError] When an option is invalid, before the message is sent.
+    # @raise [NATS::JetStream::Error::TooManyStalledMsgs] When too many
+    #   messages still await their acks after the stall wait.
+    # @return [PubAckFuture]
+    def publish_msg_async(msg, **params)
+      check_publish_msg(msg, params)
+      unless msg.reply.to_s.empty?
+        raise JetStream::Error::AsyncPublishReplySubjectSet.new("nats: reply subject should be empty")
       end
+
+      async_publish(msg.subject, msg.data, msg.header, params)
     end
 
     # publish_async_pending is the number of messages published with
@@ -613,8 +638,49 @@ module NATS
 
     private
 
+    # sync_publish publishes a message and waits for its ack.
+    def sync_publish(subject, payload, header, params)
+      params[:timeout] ||= @opts[:timeout]
+      retry_attempts, retry_wait = pub_retry(params)
+      # Send message with headers.
+      msg = NATS::Msg.new(subject: subject,
+        data: payload || "",
+        header: publish_header(params, header))
+
+      pub_ack(request_with_retry(msg, params[:timeout], retry_attempts, retry_wait))
+    end
+
+    # async_publish publishes a message with a reply of its own and returns
+    # the future for its ack.
+    def async_publish(subject, payload, header, params)
+      retry_attempts, retry_wait = pub_retry(params)
+      timeout = params.fetch(:timeout) { @opts[:publish_async_timeout] }
+      stall_wait = params.fetch(:stall_wait) { @opts.fetch(:publish_async_stall_wait, DEFAULT_PUB_ASYNC_STALL_WAIT) }
+      positive_seconds!(:timeout, timeout) unless timeout.nil?
+      positive_seconds!(:stall_wait, stall_wait)
+      header = publish_header(params, header)
+
+      @async_mon.synchronize do
+        start_async_reply_sub unless @async_sub
+        @async_tokens += 1
+        msg = NATS::Msg.new(subject: subject, reply: "#{@async_prefix}#{@async_tokens.to_s(36)}",
+          data: payload || "", header: header)
+        future = PubAckFuture.new(msg, retry_attempts: retry_attempts, retry_wait: retry_wait, timeout: timeout)
+        @async_acks[msg.reply] = future
+        stall_async_publish(msg.reply, stall_wait)
+        publish_async_msg(future)
+      end
+    end
+
+    # check_publish_msg checks the message and the options of publish_msg
+    # and publish_msg_async, which take the header of the message.
+    def check_publish_msg(msg, params)
+      raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(NATS::Msg)
+      raise ArgumentError.new("nats: the header of a NATS::Msg is published, not a header option") if params.key?(:header)
+    end
+
     # publish_header makes the header of a publish from its options.
-    def publish_header(params)
+    def publish_header(params, header = params[:header])
       # The options add to a copy of the header, which the caller may reuse.
       options = {
         Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
@@ -625,7 +691,7 @@ module NATS
 
         options.merge!(schedule_header(**schedule))
       end
-      options.empty? ? params[:header] : params[:header].to_h.merge(options)
+      options.empty? ? header : header.to_h.merge(options)
     end
 
     # init_client_trace checks the callbacks of the client_trace option.
