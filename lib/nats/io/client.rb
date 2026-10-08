@@ -273,6 +273,7 @@ module NATS
       @connect_cb = nil
       @discovered_servers_cb = nil
       @lame_duck_mode_cb = nil
+      @reconnect_error_cb = nil
 
       # Secure TLS options
       @tls = nil
@@ -1150,8 +1151,9 @@ module NATS
     end
 
     # The callbacks set with on_error, on_disconnect, on_reconnect,
-    # on_close, on_connect, on_discovered_servers and on_lame_duck_mode,
-    # like ErrorHandler, DisconnectErrHandler and the like of nats.go.
+    # on_close, on_connect, on_discovered_servers, on_lame_duck_mode and
+    # on_reconnect_error, like ErrorHandler, DisconnectErrHandler and the
+    # like of nats.go.
     def error_handler = @err_cb
 
     def disconnect_handler = @disconnect_cb
@@ -1165,6 +1167,8 @@ module NATS
     def discovered_servers_handler = @discovered_servers_cb
 
     def lame_duck_mode_handler = @lame_duck_mode_cb
+
+    def reconnect_error_handler = @reconnect_error_cb
 
     def on_error(&callback)
       @err_cb = callback
@@ -1202,6 +1206,13 @@ module NATS
     # move elsewhere before it does, like LameDuckModeHandler of nats.go.
     def on_lame_duck_mode(&callback)
       @lame_duck_mode_cb = callback
+    end
+
+    # Sets the callback called with the error of each attempt to reconnect
+    # that fails, like ReconnectErrCB of nats.go, also those that
+    # retry_on_failed_connect makes. These errors go to on_error as well.
+    def on_reconnect_error(&callback)
+      @reconnect_error_cb = callback
     end
 
     def last_error
@@ -1896,6 +1907,12 @@ module NATS
       err_cb_call(self, e, nil)
     end
 
+    def reconnect_error_cb_call(e)
+      @reconnect_error_cb&.call(e)
+    rescue => cb_err
+      err_cb_call(self, cb_err, nil)
+    end
+
     def err_cb_call(nc, e, sub)
       # Services stop on the errors of their subscriptions, like nats.go micro.
       @_services&.send(:handle_async_error, e, sub) if sub
@@ -2228,7 +2245,10 @@ module NATS
     def attempt_reconnect(generation, initial: false)
       return if closed_since?(generation)
 
-      unless initial
+      if initial
+        # Like nats.go, report what failed the first connect.
+        reconnect_error_cb_call(@last_err) if @last_err
+      else
         @disconnect_cb&.call(@last_err)
         notify_status_listeners(:disconnect)
       end
@@ -2278,6 +2298,7 @@ module NATS
 
         # Trigger async error handler
         err_cb_call(self, e, nil) if @err_cb
+        reconnect_error_cb_call(e)
 
         # Continue retrying until there are no options left in the server pool
         retry

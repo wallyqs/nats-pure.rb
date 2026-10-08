@@ -93,6 +93,7 @@ module NATS
     @connect_cb: Proc?
     @discovered_servers_cb: Proc?
     @lame_duck_mode_cb: Proc?
+    @reconnect_error_cb: Proc?
 
     @tls: bool?
 
@@ -207,6 +208,8 @@ module NATS
 
     def lame_duck_mode_handler: () -> Proc?
 
+    def reconnect_error_handler: () -> Proc?
+
     def connected?: () -> bool
 
     def connecting?: () -> bool
@@ -230,6 +233,8 @@ module NATS
     def on_discovered_servers: () { () -> void } -> void
 
     def on_lame_duck_mode: () { () -> void } -> void
+
+    def on_reconnect_error: () { (untyped) -> void } -> void
 
     def last_error: () -> untyped
 
@@ -304,6 +309,8 @@ module NATS
     def notify_status_listeners: (Symbol) -> void
 
     def async_cb_call: (Proc?) -> void
+
+    def reconnect_error_cb_call: (untyped) -> void
 
     def err_cb_call: (self, untyped, NATS::Subscription) -> void
 
