@@ -57,6 +57,8 @@ module NATS
 
       def paged_request: (String, Symbol, Hash[Symbol, untyped], Hash[Symbol, untyped]) -> Array[untyped]
 
+      def consumer_info?: (Hash[Symbol, untyped]) -> bool
+
       def check_stream_applied: (JetStream::API::StreamConfig, Hash[Symbol, untyped]) -> void
 
       def request_pause: (String, String, Hash[Symbol, String], Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse

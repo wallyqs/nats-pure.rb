@@ -127,6 +127,14 @@ module NATS
       class ConsumerMultipleFilterSubjectsNotSupported < NATS::JetStream::Error
       end
 
+      class ConsumerCreationResponseEmpty < NATS::JetStream::Error
+        def initialize: (?String) -> void
+      end
+
+      class ConsumerResetResponseEmpty < NATS::JetStream::Error
+        def initialize: (?String) -> void
+      end
+
       class ConsumerNotActive < NATS::JetStream::Error
       end
 

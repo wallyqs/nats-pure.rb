@@ -277,6 +277,8 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The result of creating a Consumer.
+      # @raise [JetStream::Error::ConsumerCreationResponseEmpty] When the server answered
+      #   without the info of the consumer.
       def add_consumer(stream, config, params = {})
         upsert_consumer(stream, config, nil, params)
       end
@@ -290,6 +292,8 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The result of creating a Consumer.
+      # @raise [JetStream::Error::ConsumerCreationResponseEmpty] When the server answered
+      #   without the info of the consumer.
       def create_consumer(stream, config, params = {})
         upsert_consumer(stream, config, "create", params)
       end
@@ -307,6 +311,8 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The updated Consumer.
+      # @raise [JetStream::Error::ConsumerCreationResponseEmpty] When the server answered
+      #   without the info of the consumer.
       def update_consumer(stream, config, params = {})
         upsert_consumer(stream, config, "update", params)
       end
@@ -415,6 +421,8 @@ module NATS
       # @return [JetStream::API::ConsumerResetResponse]
       # @raise [ArgumentError] When seq is not an integer of 0 or more.
       # @raise [JetStream::Error::ConsumerInvalidReset] When the consumer cannot be reset to seq.
+      # @raise [JetStream::Error::ConsumerResetResponseEmpty] When the server answered
+      #   without the info of the consumer.
       # @raise [NATS::Timeout] When the stream or consumer does not exist, or the server
       #   cannot reset consumers.
       def reset_consumer(stream, consumer, params = {})
@@ -428,6 +436,8 @@ module NATS
         req_subject = "#{@prefix}.CONSUMER.RESET.#{stream}.#{consumer}"
         req = {seq: seq}.compact
         result = api_request(req_subject, req.to_json, params.except(:seq))
+        raise JetStream::Error::ConsumerResetResponseEmpty unless consumer_info?(result)
+
         JetStream::API::ConsumerResetResponse.new(result)
       end
 
@@ -566,11 +576,18 @@ module NATS
         req[:action] = action if action
 
         result = api_request(req_subject, req.to_json, params)
+        raise JetStream::Error::ConsumerCreationResponseEmpty unless consumer_info?(result)
         # Like nats.go, check that the server applied the filter subjects.
         if !cfg[:filter_subjects].to_a.empty? && result.dig(:config, :filter_subjects).to_a.empty?
           raise JetStream::Error::ConsumerMultipleFilterSubjectsNotSupported.new("nats: multiple consumer filter subjects not supported by nats-server")
         end
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # consumer_info? tells whether a response that is not an error has
+      # the info of a consumer: any of its fields, as nats.go has it.
+      def consumer_info?(result)
+        !(result.keys & (JetStream::API::ConsumerInfo.members - [:type])).empty?
       end
 
       # check_stream_applied raises the errors of nats.go when the server
