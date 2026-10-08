@@ -254,6 +254,10 @@ module NATS
 
     private
 
+    def check_publish_subject!: (String?, ?String?) -> void
+
+    def skip_subject_validation?: () -> bool
+
     def connected_server_info: (Symbol) -> untyped
 
     def server_info_unless_closed: (Symbol) -> untyped

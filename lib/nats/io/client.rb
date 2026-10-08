@@ -164,6 +164,10 @@ module NATS
     SUB_OP = "SUB"
     EMPTY_MSG = ""
 
+    # Whitespace, which subjects may not have.
+    WHITESPACE = /[ \t\r\n]/
+    private_constant :WHITESPACE
+
     # Replaces the password of the URL in connected_url_redacted.
     REDACTED = "xxxxx"
     private_constant :REDACTED
@@ -587,7 +591,7 @@ module NATS
     end
 
     def publish(subject, msg = EMPTY_MSG, opt_reply = nil, **options, &blk)
-      raise NATS::IO::BadSubject if !subject || subject.empty?
+      check_publish_subject!(subject, opt_reply)
       if options[:header]
         return publish_msg(NATS::Msg.new(subject: subject, data: msg, reply: opt_reply, header: options[:header]))
       end
@@ -607,7 +611,7 @@ module NATS
     # Publishes a NATS::Msg that may include headers.
     def publish_msg(msg)
       raise NATS::IO::InvalidMsg, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
-      raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
+      check_publish_subject!(msg.subject, msg.reply)
       if msg.header && !@server_info.empty? && !@server_info[:headers]
         raise NATS::IO::HeadersNotSupported.new("nats: headers not supported by this server")
       end
@@ -644,10 +648,13 @@ module NATS
     # messages to a callback.
     def subscribe(subject, opts = {}, &callback)
       raise NATS::IO::ConnectionDrainingError.new("nats: connection draining") if draining?
-      # Whitespace would change the meaning of the SUB protocol line, so it is
-      # refused like in nats.go; other invalid subjects are left to the server.
+      # Like nats.go, refuse subjects with whitespace, which would change the
+      # meaning of the SUB protocol line, or with empty tokens, unless
+      # skip_subject_validation leaves the latter to the server.
       subj = subject.to_s
-      raise NATS::IO::BadSubject.new("nats: invalid subject") if subj.empty? || subj.match?(/[ \t\r\n]/)
+      if subj.empty? || subj.match?(WHITESPACE) || (!skip_subject_validation? && subj.split(".", -1).any?(&:empty?))
+        raise NATS::IO::BadSubject.new("nats: invalid subject")
+      end
       raise NATS::IO::BadQueueName.new("nats: invalid queue name") if opts[:queue].to_s.match?(/[ \t\r\n]/)
 
       # The limits of the connection, unless given, like SubChanLen of nats.go.
@@ -695,7 +702,7 @@ module NATS
     # specified deadline.
     # If given a callback, then the request happens asynchronously.
     def request(subject, payload = "", **opts, &blk)
-      raise NATS::IO::BadSubject if !subject || subject.empty?
+      check_publish_subject!(subject)
 
       # If a block was given then fallback to method using auto unsubscribe.
       return old_request(subject, payload, opts, &blk) if blk
@@ -754,7 +761,7 @@ module NATS
     # request_msg makes a NATS request using a NATS::Msg that may include headers.
     def request_msg(msg, **opts)
       raise NATS::IO::InvalidMsg, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
-      raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
+      check_publish_subject!(msg.subject)
 
       token = nil
       inbox = nil
@@ -1340,6 +1347,22 @@ module NATS
     end
 
     private
+
+    # Checks the subject of a publish or request, and its reply subject
+    # when given, like nats.go: it may not be empty, and, unless
+    # skip_subject_validation, may not have whitespace.
+    def check_publish_subject!(subject, reply = nil)
+      raise NATS::IO::BadSubject.new("nats: invalid subject") if !subject || subject.empty?
+      return if skip_subject_validation?
+
+      if subject.match?(WHITESPACE) || reply&.match?(WHITESPACE)
+        raise NATS::IO::BadSubject.new("nats: invalid subject")
+      end
+    end
+
+    def skip_subject_validation?
+      !!@options&.[](:skip_subject_validation)
+    end
 
     def connected_server_info(key)
       synchronize { connected? ? @server_info[key] : nil }
