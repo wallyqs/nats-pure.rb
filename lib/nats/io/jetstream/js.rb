@@ -37,6 +37,7 @@ module NATS
       # The errors for the err_codes of the JetStream API that nats.go
       # names, from errors.json of nats-server.
       ERR_CODE_ERRORS = {
+        10003 => ::NATS::JetStream::Error::JSBadRequest,
         10012 => ::NATS::JetStream::Error::ConsumerCreate,
         10013 => ::NATS::JetStream::Error::ConsumerNameAlreadyInUse,
         10014 => ::NATS::JetStream::Error::ConsumerNotFound,
