@@ -1318,6 +1318,9 @@ module NATS
       if @options[:ws_headers] && !@options[:ws_headers].is_a?(Hash)
         raise ArgumentError, "nats: ws_headers must be a Hash"
       end
+      if @options[:proxy_path] && !@options[:proxy_path].is_a?(String)
+        raise ArgumentError, "nats: proxy_path must be a String"
+      end
       if @options[:ws_headers_handler] && @options[:ws_headers]&.any?
         raise ArgumentError, "nats: websocket connection headers already set"
       end
@@ -2470,7 +2473,8 @@ module NATS
         connect_timeout: @options[:connect_timeout],
         compression: @options[:compression],
         headers: @options[:ws_headers],
-        headers_handler: @options[:ws_headers_handler]
+        headers_handler: @options[:ws_headers_handler],
+        proxy_path: @options[:proxy_path]
       )
     end
 

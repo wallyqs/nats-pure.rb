@@ -32,6 +32,7 @@ module NATS
       @compression: bool?
       @headers: Hash[String | Symbol, String | Array[String]]?
       @headers_handler: Proc?
+      @proxy_path: String?
       @compressed: bool
       @handshaked: bool
       @rbuf: String

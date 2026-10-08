@@ -54,10 +54,12 @@ module NATS
       # @param options [Hash] Those of Socket, and :compression to ask the
       #   server to compress messages, and :headers, a Hash of HTTP headers,
       #   or :headers_handler, a Proc that returns them, to send with the
-      #   upgrade request.
+      #   upgrade request, and :proxy_path, the path to request instead of
+      #   that of the URL.
       def initialize(options = {})
         super
         @compression = options[:compression]
+        @proxy_path = options[:proxy_path]
         @headers = options[:headers]
         @headers_handler = options[:headers_handler]
         @compressed = false
@@ -184,9 +186,10 @@ module NATS
         end
       end
 
+      # Like nats.go, the proxy path, when set, replaces the path of the URL.
       def request_path
-        path = @uri.path.to_s
-        path = "/" if path.empty?
+        path = @proxy_path.to_s.empty? ? @uri.path.to_s : @proxy_path.to_s
+        path = "/#{path}" unless path.start_with?("/")
         path += "?#{@uri.query}" if @uri.query
         path
       end
