@@ -16,7 +16,7 @@ module NATS
 
       private
 
-      def pull_and_wait: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
+      def pull_and_wait: (Array[NATS::Msg], Hash[Symbol, untyped], Float, ?Numeric?) ?{ (NATS::Msg) -> void } -> bool?
 
       def pull_pending: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
 

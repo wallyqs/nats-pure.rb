@@ -46,6 +46,9 @@ module NATS
       class AsyncPublishTimeout < NATS::JetStream::Error
       end
 
+      class NoHeartbeat < NATS::JetStream::Error
+      end
+
       class APIError < NATS::JetStream::Error
         attr_reader code: Integer
         attr_reader err_code: Integer

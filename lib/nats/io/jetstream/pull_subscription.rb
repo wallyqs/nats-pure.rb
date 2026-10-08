@@ -108,6 +108,10 @@ module NATS
       #   ends once the batch or these bytes are taken, or the next message would
       #   exceed them. Messages that earlier pulls left to the subscription count
       #   too. To fetch by bytes only, pass a large batch.
+      # @option params [Float] :heartbeat Seconds between the idle heartbeats that
+      #   the server sends to the pull while it has no messages for it, less than
+      #   half the timeout. The fetch ends when it hears nothing for two of them,
+      #   as when the server is gone. Not for :no_wait.
       # @yieldparam msg [NATS::Msg] Each delivery, as it comes.
       # @return [Array<NATS::Msg>]
       # @raise [NATS::Timeout] When a fetch that waits got no messages before its timeout.
@@ -122,6 +126,8 @@ module NATS
       # @raise [NATS::JetStream::Error::MaxBytesExceeded] With :max_bytes, when the
       #   server ended the pull before the fetch got messages, as the next message
       #   would exceed them.
+      # @raise [NATS::JetStream::Error::NoHeartbeat] With :heartbeat, when the fetch
+      #   heard nothing for two heartbeats before it got messages.
       # @raise [NATS::JetStream::Error] When the server ended the pull of the fetch
       #   with an error before it got messages.
       def fetch(batch = 1, params = {}, &block)
@@ -141,6 +147,15 @@ module NATS
         timeout = params[:timeout] || (params[:no_wait] ? 1 : 5)
         unless timeout.is_a?(Numeric) && timeout.positive? && timeout.finite?
           raise ArgumentError.new("nats: timeout should be a finite positive number")
+        end
+        heartbeat = params[:heartbeat]
+        if heartbeat
+          unless heartbeat.is_a?(Numeric) && heartbeat.positive? && heartbeat.finite?
+            raise ArgumentError.new("nats: heartbeat should be a finite positive number")
+          end
+          raise ArgumentError.new("nats: heartbeat cannot be used with no_wait") if params[:no_wait]
+          # Like nats.go, which the server would refuse otherwise.
+          raise ArgumentError.new("nats: heartbeat should be less than half the timeout") if heartbeat * 2 >= timeout
         end
 
         deadline = MonotonicTime.now + timeout
@@ -164,7 +179,11 @@ module NATS
           # second longer for the server to end it, so that it leaves nothing
           # behind.
           next_req[:expires] = pull_expires(deadline)
-          pull_and_wait(msgs, next_req, deadline + 1, &block)
+          # The server refuses a heartbeat of more than half the expiry,
+          # which the time taken so far may have made it.
+          heartbeat = nil if heartbeat && heartbeat * 2_000_000_000 > next_req[:expires]
+          next_req[:idle_heartbeat] = (heartbeat * 1_000_000_000).to_i if heartbeat
+          pull_and_wait(msgs, next_req, deadline, heartbeat, &block)
           raise ::NATS::Timeout.new("nats: fetch timeout") if msgs.empty?
         end
         msgs
@@ -184,11 +203,30 @@ module NATS
       # its own under the subscription, as ADR-13 has it. The messages it
       # delivers carry the subjects of the stream, so that fetches share
       # them, but the status that ends it comes to its reply.
-      def pull_and_wait(msgs, next_req, deadline, &block)
+      #
+      # The pull expires at the deadline. As nats.go does, it waits up to a
+      # second longer for the server to end it, so that it leaves nothing
+      # behind. With a heartbeat, it ends once it hears nothing for two
+      # heartbeats before then, and raises NoHeartbeat if it got nothing.
+      def pull_and_wait(msgs, next_req, deadline, heartbeat = nil, &block)
         reply = synchronize { "#{@subject.chomp("*")}#{@pulls += 1}" }
         synchronize { @pull_ends[reply] = nil }
         pin_id = pull(next_req, reply)
-        receive(msgs, next_req, pin_id, -> { wait_pending(reply, deadline) }, &block)
+        heard = MonotonicTime.now
+        next_msg = lambda do
+          silent = heartbeat && heard + 2 * heartbeat
+          if silent && silent < deadline
+            msg = wait_pending(reply, silent)
+            raise ::NATS::JetStream::Error::NoHeartbeat.new("nats: no heartbeat received") if msg.nil?
+          else
+            msg = wait_pending(reply, deadline + 1)
+          end
+          heard = MonotonicTime.now if msg
+          msg
+        end
+        receive(msgs, next_req, pin_id, next_msg, &block)
+      rescue ::NATS::JetStream::Error::NoHeartbeat
+        raise if msgs.empty?
       ensure
         synchronize { @pull_ends.delete(reply) }
       end
@@ -223,6 +261,8 @@ module NATS
 
             next
           end
+
+          next if msg.header[JS::Header::Status] == JS::Status::CtrlMsg
 
           forget_pin(pin_id) if msg.header[JS::Header::Status] == JS::Status::PinIdMismatch
           # An error ends the fetch too, with the messages taken before it.
@@ -331,7 +371,11 @@ module NATS
       def wait_pending(reply, deadline)
         synchronize do
           loop do
-            return @pull_ends.delete(reply) if @pull_ends[reply]
+            # Keep the reply, for what comes to it next.
+            if (ended = @pull_ends[reply])
+              @pull_ends[reply] = nil
+              return ended
+            end
 
             msg = next_pending(reply)
             return msg if msg
@@ -346,13 +390,15 @@ module NATS
 
       # next_pending takes the next message delivered to the subscription,
       # or the status that ended the pull of the reply, if there is one.
-      # Other statuses ended the pulls of other fetches, which get them if
-      # they still wait for them.
+      # Other statuses ended the pulls of other fetches, or are their
+      # heartbeats, which they get if they still wait for them.
       def next_pending(reply = nil)
         synchronize do
           while (msg = pop_pending)
             return msg unless JS.is_status_msg(msg) && msg.subject != reply
             next unless @pull_ends.key?(msg.subject)
+            # A heartbeat does not take the place of the end of a pull.
+            next if @pull_ends[msg.subject] && msg.header[JS::Header::Status] == JS::Status::CtrlMsg
 
             @pull_ends[msg.subject] = msg
             wait_for_msgs_cond.broadcast
