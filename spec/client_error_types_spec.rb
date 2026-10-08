@@ -90,6 +90,18 @@ describe "Client - error types" do
       nc.flush
       nc.close
     end
+  end
+
+  # Only max_payload here: a server that takes one connection fails this
+  # example whenever another client holds the connection for a moment.
+  context "with a max_payload" do
+    before do
+      @s = start_server_with(4957, "max_payload: 1024")
+    end
+
+    after do
+      @s.kill_server
+    end
 
     it "should raise MaxPayload for messages larger than max_payload" do
       nc, errors = connect_collecting_errors(@s.uri)
