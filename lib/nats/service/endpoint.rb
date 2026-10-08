@@ -61,8 +61,8 @@ module NATS
         @error = NATS::Service::ErrorWrapper.new(error)
 
         header = {
-          "Nats-Service-Error" => @error.message,
-          "Nats-Service-Error-Code" => @error.code
+          ERROR_HEADER => @error.message,
+          ERROR_CODE_HEADER => @error.code
         }
         header.merge!(headers) if headers
 

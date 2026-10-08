@@ -3,6 +3,13 @@ module NATS
     class Error < StandardError
     end
 
+    class VerbNotSupportedError < NATS::Service::Error
+    end
+
+    class ServiceNameRequiredError < NATS::Service::Error
+      def initialize: (?String msg) -> void
+    end
+
     class MarshalResponseError < NATS::Service::Error
     end
 

@@ -18,6 +18,42 @@ module NATS
 
     DEFAULT_QUEUE = "q"
 
+    # The root of all control subjects, like APIPrefix of nats.go micro.
+    API_PREFIX = "$SRV"
+
+    # The headers of an error response, like ErrorHeader and
+    # ErrorCodeHeader of nats.go micro.
+    ERROR_HEADER = "Nats-Service-Error"
+    ERROR_CODE_HEADER = "Nats-Service-Error-Code"
+
+    class << self
+      # Returns a control subject of services, like ControlSubject of
+      # nats.go micro: the subject to ping, or to get the info or stats of,
+      # all services, the services named name, or the instance id of them.
+      #
+      # @example
+      #   NATS::Service.control_subject(:ping)                  # => "$SRV.PING"
+      #   NATS::Service.control_subject(:info, "calc")          # => "$SRV.INFO.calc"
+      #   NATS::Service.control_subject(:stats, "calc", id)     # => "$SRV.STATS.calc.<id>"
+      #
+      # @param verb [Symbol, String] :ping, :info or :stats, in any case.
+      # @param name [String, nil] The name of the services.
+      # @param id [String, nil] The id of a service instance.
+      # @raise [NATS::Service::VerbNotSupportedError] For any other verb.
+      # @raise [NATS::Service::ServiceNameRequiredError] When id is given
+      #   without a name.
+      def control_subject(verb, name = nil, id = nil)
+        verb_str = Monitoring::VERBS[verb.to_s.downcase.to_sym] if verb.is_a?(Symbol) || verb.is_a?(String)
+        raise VerbNotSupportedError, "unsupported verb: #{verb.inspect}" unless verb_str
+
+        name = nil if name.to_s.empty?
+        id = nil if id.to_s.empty?
+        raise ServiceNameRequiredError if name.nil? && id
+
+        [API_PREFIX, verb_str, name, id].compact.join(".")
+      end
+    end
+
     attr_reader :client, :name, :id, :version, :description, :metadata, :queue
     attr_reader :monitoring, :status, :callbacks, :groups, :endpoints
 
