@@ -23,7 +23,7 @@ module NATS
 
       def key_value_for: (NATS::JetStream::API::StreamConfig, bool?) -> NATS::KeyValue
 
-      def kv_stream_pages: (String) -> Array[untyped]
+      def bucket_stream_pages: (String, String) -> Array[untyped]
     end
   end
 end

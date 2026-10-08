@@ -2,6 +2,7 @@ module NATS
   class JetStream
     extend Manager
     extend KeyValue::Manager
+    extend ObjectStore::Manager
 
     DEFAULT_PUB_RETRY_ATTEMPTS: Integer
 

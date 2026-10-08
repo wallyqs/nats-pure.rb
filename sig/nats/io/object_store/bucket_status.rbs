@@ -1,0 +1,28 @@
+module NATS
+  class ObjectStore
+    class BucketStatus
+      attr_reader bucket: String
+      attr_reader stream_info: JetStream::API::StreamInfo
+
+      def initialize: (JetStream::API::StreamInfo, String) -> void
+
+      def description: () -> String?
+
+      def ttl: () -> Integer
+
+      def storage: () -> String
+
+      def replicas: () -> Integer
+
+      def sealed?: () -> bool
+
+      def size: () -> Integer
+
+      def backing_store: () -> String
+
+      def metadata: () -> Hash[Symbol, String]?
+
+      def compressed?: () -> bool
+    end
+  end
+end

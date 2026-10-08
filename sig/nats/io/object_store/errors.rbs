@@ -1,0 +1,66 @@
+module NATS
+  class ObjectStore
+    class Error < NATS::Error
+      MESSAGE: String?
+
+      def initialize: (?String?) -> void
+    end
+
+    class ObjectConfigRequiredError < NATS::ObjectStore::Error
+    end
+
+    class InvalidStoreNameError < NATS::ObjectStore::Error
+    end
+
+    class BucketNotFoundError < NATS::ObjectStore::Error
+    end
+
+    class BucketExistsError < NATS::ObjectStore::Error
+    end
+
+    class BadObjectMetaError < NATS::ObjectStore::Error
+    end
+
+    class ObjectNotFoundError < NATS::ObjectStore::Error
+    end
+
+    class DigestMismatchError < NATS::ObjectStore::Error
+    end
+
+    class InvalidDigestFormatError < NATS::ObjectStore::Error
+    end
+
+    class NoObjectsFoundError < NATS::ObjectStore::Error
+    end
+
+    class ObjectAlreadyExistsError < NATS::ObjectStore::Error
+    end
+
+    class NameRequiredError < NATS::ObjectStore::Error
+    end
+
+    class LinkNotAllowedError < NATS::ObjectStore::Error
+    end
+
+    class ObjectRequiredError < NATS::ObjectStore::Error
+    end
+
+    class NoLinkToDeletedError < NATS::ObjectStore::Error
+    end
+
+    class NoLinkToLinkError < NATS::ObjectStore::Error
+    end
+
+    class CantGetBucketError < NATS::ObjectStore::Error
+    end
+
+    class BucketRequiredError < NATS::ObjectStore::Error
+    end
+
+    class BucketMalformedError < NATS::ObjectStore::Error
+    end
+
+    class UpdateMetaDeletedError < NATS::ObjectStore::Error
+    end
+  end
+end

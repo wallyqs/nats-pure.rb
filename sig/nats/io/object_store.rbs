@@ -1,0 +1,88 @@
+module NATS
+  class ObjectStore
+    VALID_BUCKET_RE: Regexp
+    DEFAULT_CHUNK_SIZE: Integer
+    DIGEST_TYPE: 'SHA-256='
+    ROLLUP: 'Nats-Rollup'
+    MSG_ROLLUP_SUBJECT: 'sub'
+
+    def self.digest_value: (String | untyped) -> String
+
+    def self.decode_digest: (String) -> String
+
+    attr_reader bucket: String
+
+    @stream: String
+    @js: NATS::JetStream
+    @direct: bool?
+
+    def initialize: (Hash[Symbol, untyped]) -> void
+
+    def put: (API::ObjectMeta | Hash[Symbol, untyped] | String, ?(String | IO | StringIO)) -> API::ObjectInfo
+
+    def put_string: (String, String) -> API::ObjectInfo
+
+    def put_file: (String, ?name: String) -> API::ObjectInfo
+
+    def get: (String, ?Hash[Symbol, untyped]) -> API::ObjectResult
+
+    def get_bytes: (String, ?Hash[Symbol, untyped]) -> String
+
+    def get_string: (String, ?Hash[Symbol, untyped]) -> String
+
+    def get_file: (String, String, ?Hash[Symbol, untyped]) -> API::ObjectInfo
+
+    def get_info: (String, ?Hash[Symbol, untyped]) -> API::ObjectInfo
+
+    def update_meta: (String, API::ObjectMeta | Hash[Symbol, untyped]) -> API::ObjectInfo
+
+    def delete: (String) -> bool
+
+    def add_link: (String, API::ObjectInfo) -> API::ObjectInfo
+
+    def add_bucket_link: (String, NATS::ObjectStore) -> API::ObjectInfo
+
+    def seal: () -> bool
+
+    def watch: (?Hash[Symbol, untyped]) -> NATS::ObjectWatcher
+
+    def list: (?Hash[Symbol, untyped]) -> Array[API::ObjectInfo]
+
+    def status: () -> BucketStatus
+
+    private
+
+    def to_meta: (untyped) -> API::ObjectMeta
+
+    def chunk_subject: (String) -> String
+
+    def meta_subject: (String) -> String
+
+    def publish_meta: (API::ObjectInfo) -> Time
+
+    def link_to: (String, API::ObjectLink) -> API::ObjectInfo
+
+    def last_meta_msg: (String) -> [String, Time?]
+
+    def each_chunk: (API::ObjectInfo) { (String) -> void } -> void
+  end
+
+  class ObjectWatcher
+    include Enumerable[ObjectStore::API::ObjectInfo?]
+
+    @watcher: untyped
+    @ignore_deletes: bool?
+
+    def initialize: (untyped, ?ignore_deletes: bool?) -> void
+
+    def updates: (?Hash[Symbol, untyped]) -> ObjectStore::API::ObjectInfo?
+
+    def each: () { (ObjectStore::API::ObjectInfo?) -> void } -> void
+
+    def stop: () -> void
+
+    private
+
+    def to_info: (NATS::KeyValue::Entry) -> ObjectStore::API::ObjectInfo?
+  end
+end

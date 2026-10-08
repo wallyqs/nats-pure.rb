@@ -83,7 +83,7 @@ module NATS
       # that take the subjects of a bucket.
       # @return [Array<String>]
       def key_value_store_names
-        kv_stream_pages("#{@prefix}.STREAM.NAMES").filter_map do |name|
+        bucket_stream_pages("#{@prefix}.STREAM.NAMES", "$KV.*.>").filter_map do |name|
           name.delete_prefix("KV_") if name.start_with?("KV_")
         end
       end
@@ -92,7 +92,7 @@ module NATS
       # KeyValueStores of nats.go.
       # @return [Array<KeyValue::BucketStatus>]
       def key_value_stores
-        kv_stream_pages("#{@prefix}.STREAM.LIST").filter_map do |info|
+        bucket_stream_pages("#{@prefix}.STREAM.LIST", "$KV.*.>").filter_map do |info|
           name = info[:config][:name]
           next unless name.start_with?("KV_")
 
@@ -183,12 +183,12 @@ module NATS
         )
       end
 
-      # kv_stream_pages pages through the names or infos of the streams
-      # that take the subjects of a bucket.
-      def kv_stream_pages(req_subject)
+      # bucket_stream_pages pages through the names or infos of the streams
+      # that take the subjects matching a filter, such as those of buckets.
+      def bucket_stream_pages(req_subject, filter)
         items = []
         loop do
-          req = {subject: "$KV.*.>", offset: items.size}
+          req = {subject: filter, offset: items.size}
           result = api_request(req_subject, req.to_json)
           page = result[:streams] || []
           items.concat(page)
