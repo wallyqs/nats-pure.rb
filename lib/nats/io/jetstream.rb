@@ -258,7 +258,15 @@ module NATS
       true
     end
 
-    # subscribe binds or creates a push subscription to a JetStream pull consumer.
+    # subscribe binds or creates a push subscription to a JetStream push consumer.
+    #
+    # Like js.Subscribe of nats.go, the subscription takes the control
+    # messages of the consumer, which are neither passed to the block nor
+    # returned by next_msg: it answers the flow control requests once the
+    # messages that came before them were delivered, and, when the consumer
+    # has idle heartbeats, reports a NATS::JetStream::Error::ConsumerNotActive
+    # to the error callback of the connection whenever nothing came for two
+    # of them.
     #
     # @param subject [String, Array] Subject(s) from which the messages will be fetched.
     # @param params [Hash] Options to customize the PushSubscription.
@@ -266,7 +274,15 @@ module NATS
     # @option params [String] :consumer Name of the Consumer to which the PushSubscription will be bound.
     # @option params [String] :name Name of the Consumer to which the PushSubscription will be bound.
     # @option params [String] :durable Consumer durable name from where the messages will be fetched.
+    # @option params [String] :queue Deliver group of the consumer, to subscribe as a queue.
     # @option params [Hash] :config Configuration for the consumer.
+    # @option params [Integer, Float] :idle_heartbeat Seconds between the idle heartbeats
+    #   of a consumer that it creates, unless given in :config.
+    # @option params [Boolean] :flow_control Whether a consumer that it creates uses
+    #   flow control.
+    # @option params [Boolean] :manual_ack Leave the acks of the messages passed to
+    #   the block to it, like ManualAck of nats.go; otherwise each is acked once the
+    #   block returns, unless the consumer does not ack.
     # @return [NATS::JetStream::PushSubscription]
     def subscribe(subject, params = {}, &cb)
       params[:consumer] ||= params[:durable]
@@ -303,7 +319,6 @@ module NATS
 
       queue = params[:queue]
       durable = params[:durable]
-      params[:flow_control]
       manual_ack = params[:manual_ack]
       idle_heartbeat = params[:idle_heartbeat]
       flow_control = params[:flow_control]
@@ -407,6 +422,8 @@ module NATS
         stream: stream,
         consumer: consumer
       )
+      # The KV watcher takes the control messages itself.
+      sub.send(:start_control, config.idle_heartbeat) unless params[:_ctrl_msgs]
       sub
     end
 

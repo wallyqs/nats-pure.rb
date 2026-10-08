@@ -1,7 +1,31 @@
 module NATS
   class JetStream
     module PushSubscription
+      HEARTBEAT_THRESHOLD: Integer
+
       def consumer_info: (Hash[Symbol, untyped]) -> NATS::JetStream::ConsumerInfo
+
+      def unsubscribe: (?Integer?) -> void
+
+      def dispatch: (NATS::Msg) -> void
+
+      def process: (NATS::Msg) -> void
+
+      def next_msg: (?Hash[Symbol, untyped]) -> NATS::Msg
+
+      private
+
+      def start_control: (Numeric?) -> void
+
+      def control_msg?: (NATS::Msg) -> bool
+
+      def handle_control_msg: (NATS::Msg) -> void
+
+      def delivered!: () -> void
+
+      def respond_flow_control: (String?) -> void
+
+      def check_active: (Concurrent::TimerTask) -> void
     end
   end
 end

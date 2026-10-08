@@ -30,6 +30,7 @@ module NATS
         LastConsumerSeq = "Nats-Last-Consumer"
         LastStreamSeq = "Nats-Last-Stream"
         PinId = "Nats-Pin-Id"
+        ConsumerStalled = "Nats-Consumer-Stalled"
 
         # rubocop:enable Naming/ConstantName
       end

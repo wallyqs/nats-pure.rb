@@ -507,7 +507,8 @@ module NATS
       }
 
       # watch_updates callback.
-      sub = @js.subscribe(subject, stream: @stream, config: ordered) do |msg|
+      # It takes the control messages itself, for its own heartbeat checks.
+      sub = @js.subscribe(subject, stream: @stream, config: ordered, _ctrl_msgs: true) do |msg|
         synchronize do
           if !init_setup_done
             init_setup.wait(@js.opts[:timeout])
