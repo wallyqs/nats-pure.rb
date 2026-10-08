@@ -170,7 +170,7 @@ module NATS
       op = KeyValue.operation_of(msg.headers)
       # Direct gets have the sequence in a header, as a String.
       entry = Entry.new(bucket: @name, key: key, value: msg.data, revision: msg.seq.to_i,
-        created: msg.time, operation: op || KV_PUT)
+        delta: 0, created: msg.time, operation: op || KV_PUT)
 
       if subject != msg.subject
         raise KeyNotFoundError.new(
@@ -381,9 +381,9 @@ module NATS
     #   The sequence of the revision in the bucket's stream.
     #   @return [Integer]
     # @!attribute delta
-    #   How many revisions a watcher has yet to get after this one, nil
-    #   from get.
-    #   @return [Integer, nil]
+    #   How many revisions a watcher has yet to get after this one; 0 from
+    #   get, like Delta of nats.go.
+    #   @return [Integer]
     # @!attribute created
     #   When the bucket stored the revision.
     #   @return [Time]
