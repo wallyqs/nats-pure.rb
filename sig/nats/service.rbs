@@ -3,13 +3,20 @@ module NATS
     API_PREFIX: String
     ERROR_HEADER: String
     ERROR_CODE_HEADER: String
+    DEFAULT_ENDPOINT: String
 
     def self.control_subject: (Symbol | String verb, ?String? name, ?String? id) -> String
+
+    def initialize: (NATS::Client client, Hash[Symbol, untyped] options) ?{ (NATS::Service::Request) -> void } -> void
 
     def on_error: () { (NATS::Service, NATS::Service::NATSError) -> void } -> void
 
     def stopped?: () -> bool
 
     def stop: (?Exception?) -> void
+  end
+
+  class Services
+    def add: (Hash[Symbol, untyped] options) ?{ (NATS::Service::Request) -> void } -> NATS::Service
   end
 end
