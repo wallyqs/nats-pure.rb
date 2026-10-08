@@ -21,13 +21,22 @@ module NATS
     class BadBucketError < NATS::KeyValue::Error
     end
 
+    module KeyRevisionMismatch
+    end
+
     class KeyWrongLastSequenceError < NATS::KeyValue::Error
+      include NATS::KeyValue::KeyRevisionMismatch
+
       @msg: String
 
       def initialize: (String) -> void
     end
 
     class KeyExistsError < NATS::KeyValue::KeyWrongLastSequenceError
+    end
+
+    class KeyRevisionMismatchError < NATS::JetStream::Error::WrongLastSequence
+      include NATS::KeyValue::KeyRevisionMismatch
     end
 
     class InvalidBucketNameError < ArgumentError
