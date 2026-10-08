@@ -191,6 +191,15 @@ module NATS
       # ErrConsumerAlreadyConsuming of nats.go.
       class ConsumerAlreadyConsuming < Error; end
 
+      # When a consumer is consumed without a block, like ErrHandlerRequired
+      # of nats.go. It is an ArgumentError, not a JetStream Error, as consume
+      # raised an ArgumentError for it before.
+      class HandlerRequired < ::ArgumentError
+        def initialize(msg = "nats: handler cannot be empty")
+          super
+        end
+      end
+
       # When an ordered consumer that was read with fetch is read with
       # consume or messages.
       class OrderedConsumerUsedAsFetch < Error; end

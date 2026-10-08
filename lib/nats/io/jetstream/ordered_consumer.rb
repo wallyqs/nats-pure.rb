@@ -134,11 +134,12 @@ module NATS
       #   5 seconds by default, or half of :expires when that is less than 10 seconds.
       # @yieldparam msg [NATS::Msg]
       # @return [NATS::JetStream::ConsumeContext]
+      # @raise [NATS::JetStream::Error::HandlerRequired] When there is no block.
       # @raise [NATS::JetStream::Error::OrderedConsumerUsedAsFetch] When it was read with fetch.
       # @raise [NATS::JetStream::Error::OrderedConsumerConcurrentRequests] When
       #   consume or messages still run.
       def consume(params = {}, &block)
-        raise ArgumentError.new("nats: consume needs a block") unless block
+        raise Error::HandlerRequired unless block
 
         ConsumeContext.new(messages(params), @js.nc, params, block)
       end

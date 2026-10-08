@@ -144,6 +144,10 @@ module NATS
       class ConsumerAlreadyConsuming < NATS::JetStream::Error
       end
 
+      class HandlerRequired < ::ArgumentError
+        def initialize: (?String) -> void
+      end
+
       class OrderedConsumerUsedAsFetch < NATS::JetStream::Error
       end
 
