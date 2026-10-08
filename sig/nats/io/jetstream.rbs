@@ -39,6 +39,8 @@ module NATS
 
     def publish_header: (Hash[Symbol, untyped]) -> Hash[String, untyped]?
 
+    def init_client_trace: () -> void
+
     def init_async_publisher: () -> void
 
     def start_async_reply_sub: () -> void
