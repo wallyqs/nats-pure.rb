@@ -37,6 +37,8 @@ module NATS
 
     def start_async_reply_sub: () -> void
 
+    def fail_async_futures: (Symbol) -> void
+
     def stall_async_publish: (String, Numeric) -> void
 
     def publish_async_msg: (NATS::JetStream::PubAckFuture) -> NATS::JetStream::PubAckFuture

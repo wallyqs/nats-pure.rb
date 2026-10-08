@@ -184,6 +184,8 @@ module NATS
     def initialize(client)
       @client = client
       super
+      # Like nats.go micro, services stop once their connection is closed.
+      client.send(:add_status_listener) { |event| stop_all if event == :close }
     end
 
     def add(options)
@@ -208,7 +210,7 @@ module NATS
       end
     end
 
-    # Called by the client once its connection is closed: stops every
+    # Called once the connection of the client is closed: stops every
     # service, like nats.go micro does.
     def stop_all
       to_a.each do |service|

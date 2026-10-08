@@ -175,7 +175,10 @@ module NATS
     # its ack, like PublishAsync of nats.go, and returns a future for the
     # ack. The acks come to a single subscription of the context, to a reply
     # subject with a token per message. When the server says that no stream
-    # took the message, it is published again, as with publish.
+    # took the message, it is published again, as with publish. The futures
+    # that await their acks when the connection is lost fail with
+    # NATS::IO::Disconnected, like nats.go, and when it is closed with
+    # NATS::IO::ConnectionClosedError.
     #
     # @example
     #   futures = 100.times.map { |i| js.publish_async("orders.new", "order #{i}") }
@@ -549,6 +552,7 @@ module NATS
       @async_tokens = 0
       @async_sub = nil
       @async_prefix = nil
+      @async_listener = nil
     end
 
     # start_async_reply_sub subscribes to the replies of all the messages
@@ -556,6 +560,30 @@ module NATS
     def start_async_reply_sub
       @async_prefix = "#{@nc.new_inbox}."
       @async_sub = @nc.subscribe("#{@async_prefix}*") { |msg| handle_async_reply(msg) }
+      @async_listener ||= @nc.send(:add_status_listener) { |event| fail_async_futures(event) }
+    end
+
+    # fail_async_futures ends the futures that await acks when the
+    # connection is lost or closed, as their acks may never come: with
+    # NATS::IO::Disconnected when it reconnects, like nats.go, and with
+    # NATS::IO::ConnectionClosedError once it is closed, when the replies
+    # are subscribed to again by the next publish_async.
+    def fail_async_futures(event)
+      futures = @async_mon.synchronize do
+        if event == :close
+          @async_sub = nil
+          @async_prefix = nil
+        end
+        @async_acks.values.tap { @async_acks.keys.each { |reply| remove_async_future(reply) } }
+      end
+      futures.each do |future|
+        err = if event == :close
+          NATS::IO::ConnectionClosedError.new("nats: connection closed")
+        else
+          NATS::IO::Disconnected.new("nats: server is disconnected")
+        end
+        resolve_async_future(future, err: err)
+      end
     end
 
     # stall_async_publish waits, while more messages await their acks than
