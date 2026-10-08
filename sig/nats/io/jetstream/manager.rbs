@@ -72,6 +72,8 @@ module NATS
       def _lift_msg_to_raw_msg: (NATS::Msg) -> JetStream::API::RawStreamMsg
 
       def stream_config_json: (JetStream::API::StreamConfig) -> String
+
+      def source_domain: (untyped) -> untyped
     end
   end
 end
