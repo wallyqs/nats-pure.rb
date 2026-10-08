@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- `nc.connected?` was `false` while the connection drained. Like `IsConnected` of nats.go, it is now `true` until the drain closes the connection, as the connection still publishes and delivers messages; `draining?` tells the drain apart. As in nats.go, a connection that fails while draining still closes instead of reconnecting, and sends no keepalive PINGs.
 - `sub.next_msg` on a subscription with a callback raised `NoMethodError`. It now raises `NATS::IO::SyncSubRequired`, a `ClientError`, like `ErrSyncSubRequired` of nats.go.
 - KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
 - KV: `create_key_value` dropped the `placement` of the bucket, so its stream was created without it. It now passes it on to the stream config, like `CreateKeyValue` of nats.go.

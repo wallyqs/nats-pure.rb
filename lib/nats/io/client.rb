@@ -829,7 +829,7 @@ module NATS
     # @raise [NATS::Timeout] When the PONG does not come within 10 seconds.
     def rtt
       raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
-      raise NATS::IO::Disconnected.new("nats: server is disconnected") unless connected? || draining?
+      raise NATS::IO::Disconnected.new("nats: server is disconnected") unless connected?
 
       start = MonotonicTime.now
       flush(10)
@@ -1055,8 +1055,10 @@ module NATS
       !@status or @status == DISCONNECTED
     end
 
+    # Whether the connection is connected, also while it drains, like
+    # IsConnected of nats.go.
     def connected?
-      @status == CONNECTED
+      @status == CONNECTED || @status == DRAINING_SUBS || @status == DRAINING_PUBS
     end
 
     def connecting?
@@ -1835,7 +1837,8 @@ module NATS
 
         # If we were connected and configured to reconnect,
         # then trigger disconnect and start reconnection logic
-        if connected? && should_reconnect?
+        # Like nats.go, not while draining.
+        if @status == CONNECTED && should_reconnect?
           initiate_reconnect
           Thread.exit
           return
@@ -1958,8 +1961,8 @@ module NATS
       loop do
         return if stop.wait(@options[:ping_interval])
 
-        # Skip ping interval until connected
-        next if !connected?
+        # Skip ping interval until connected, and while draining, like nats.go.
+        next if @status != CONNECTED
 
         if @pings_outstanding >= @options[:max_outstanding_pings]
           process_op_error(NATS::IO::StaleConnectionError.new("nats: stale connection"))
