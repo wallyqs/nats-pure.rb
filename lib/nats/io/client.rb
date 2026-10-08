@@ -138,6 +138,26 @@ module NATS
     }.freeze
     private_constant :SERVER_ERRORS
 
+    # A barrier of nc.barrier, which runs its block once every subscription
+    # it was added to passed it.
+    class Barrier
+      def initialize(subs, nc, block)
+        @left = subs
+        @nc = nc
+        @block = block
+        @mutex = Mutex.new
+      end
+
+      def pass
+        return unless @mutex.synchronize { (@left -= 1).zero? }
+
+        @block.call
+      rescue => e
+        @nc.send(:err_cb_call, @nc, e, nil)
+      end
+    end
+    private_constant :Barrier
+
     INSTANCES = ObjectSpace::WeakMap.new # tracks all alive client instances
     private_constant :INSTANCES
 
@@ -886,6 +906,33 @@ module NATS
         @single_url_connect_used &&= pool.all? { |srv| srv[:hostname] == @hostname }
         @server_pool = pool
       end
+      nil
+    end
+
+    # Runs the block once the messages that the subscriptions with a
+    # callback received so far have been processed, like Barrier of nats.go:
+    # the subscription that processes its last such message runs it, from
+    # its thread. With no such subscriptions it runs right away. Errors that
+    # the block raises go to on_error, as those of callbacks do.
+    #
+    # @example Wait for the messages published so far to be processed
+    #   nc.flush
+    #   done = Queue.new
+    #   nc.barrier { done << true }
+    #   done.pop
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    def barrier(&block)
+      raise ArgumentError, "nats: barrier needs a block" unless block
+
+      subs = synchronize do
+        raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+
+        @subs.values.select { |sub| sub.callback && sub.pending_queue }
+      end
+      return block.call if subs.empty?
+
+      barrier = Barrier.new(subs.size, self, block)
+      subs.each { |sub| sub.send(:add_barrier, barrier) }
       nil
     end
 

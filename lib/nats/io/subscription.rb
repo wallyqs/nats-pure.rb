@@ -60,6 +60,14 @@ module NATS
       # Sync subscriber
       @wait_for_msgs_cond = nil
 
+      # Async subscriber: the messages handed to pending_queue and taken
+      # from it so far, those being processed, and the barriers that wait
+      # for the messages handed before them to be processed.
+      @enqueued = 0
+      @dequeued = 0
+      @processing = {}
+      @barriers = []
+
       # To limit number of concurrent messages being processed (1 to only allow sequential processing)
       @processing_concurrency = opts.fetch(:processing_concurrency, NATS::IO::DEFAULT_SINGLE_SUB_CONCURRENCY)
     end
@@ -110,8 +118,11 @@ module NATS
     end
 
     def dispatch(msg)
-      pending_queue << msg
-      synchronize { self.pending_size += msg.data.size }
+      synchronize do
+        pending_queue << msg
+        self.pending_size += msg.data.size
+        @enqueued += 1
+      end
 
       # For async subscribers, send message for processing to the thread pool.
       enqueue_processing(@nc.subscription_executor) if callback
@@ -146,12 +157,19 @@ module NATS
     def enqueue_processing(executor)
       concurrency_semaphore.try_acquire || return # Previous message is being executed, let it finish and enqueue next one.
       executor.post do
-        msg = pending_queue.pop(true)
+        seq = nil
+        msg = synchronize do
+          pending_queue.pop(true).tap do
+            seq = (@dequeued += 1)
+            @processing[seq] = true
+          end
+        end
         process(msg)
       rescue ThreadError # queue is empty
         # No release here: the ensure below releases the permit; a second
         # release would grow the semaphore beyond processing_concurrency.
       ensure
+        processed(seq) if seq
         concurrency_semaphore.release
         [concurrency_semaphore.available_permits, pending_queue.size].min.times do
           enqueue_processing(executor)
@@ -163,6 +181,42 @@ module NATS
       # subscription can process messages again after a reconnect;
       # the message stays in pending_queue.
       concurrency_semaphore.release
+    end
+
+    private
+
+    # Called by the client for a barrier, which is passed once the messages
+    # dispatched so far have been processed, even when processed
+    # concurrently, out of order.
+    def add_barrier(barrier)
+      passed = synchronize do
+        @barriers << [@enqueued, barrier]
+        passed_barriers
+      end
+      passed.each(&:pass)
+    end
+
+    # Called once message seq is processed.
+    def processed(seq)
+      passed = synchronize do
+        @processing.delete(seq)
+        passed_barriers
+      end
+      passed.each(&:pass)
+    end
+
+    # Takes the barriers whose messages have all been processed: all taken
+    # from pending_queue, and none of them still being processed. The
+    # messages being processed are in the order they were taken, so the
+    # first one is the oldest. The lock is held.
+    def passed_barriers
+      return [] if @barriers.empty?
+
+      oldest = @processing.first&.first
+      passed, @barriers = @barriers.partition do |last, _|
+        @dequeued >= last && (oldest.nil? || oldest > last)
+      end
+      passed.map(&:last)
     end
   end
 end
