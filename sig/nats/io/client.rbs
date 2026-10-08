@@ -219,6 +219,8 @@ module NATS
 
     def can_reuse_server?: (Hash[Symbol, untyped]) -> bool
 
+    def reconnect_delay: (Hash[Symbol, untyped]?) -> Float
+
     def should_delay_connect?: () -> bool
 
     def should_not_reconnect?: () -> bool
@@ -247,6 +249,8 @@ module NATS
 
     MAX_RECONNECT_ATTEMPTS: 10
     RECONNECT_TIME_WAIT: 2
+    RECONNECT_JITTER: Float
+    RECONNECT_JITTER_TLS: Integer
 
     MAX_PENDING_SIZE: 32768
 
