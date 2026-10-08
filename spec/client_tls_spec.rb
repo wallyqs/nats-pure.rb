@@ -141,7 +141,7 @@ describe "Client - TLS spec" do
             context: tls_context
           }
         })
-      end.to raise_error(OpenSSL::SSL::SSLError)
+      end.to raise_error(NATS::IO::TLSError) { |e| expect(e.cause).to be_a(OpenSSL::SSL::SSLError) }
     end
   end
 
@@ -295,7 +295,7 @@ describe "Client - TLS spec" do
 
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
-      end.to raise_error(OpenSSL::SSL::SSLError)
+      end.to raise_error(NATS::IO::TLSError) { |e| expect(e.cause).to be_a(OpenSSL::SSL::SSLError) }
     end
   end
 
@@ -380,7 +380,7 @@ describe "Client - TLS spec" do
 
         response = nats.request("hello", "world")
         expect(response.data).to eql("ok")
-      end.to raise_error(OpenSSL::SSL::SSLError)
+      end.to raise_error(NATS::IO::TLSError) { |e| expect(e.cause).to be_a(OpenSSL::SSL::SSLError) }
     end
 
     it "should not be able to connect if client enabled hostname verification using tls as the scheme" do
@@ -398,7 +398,7 @@ describe "Client - TLS spec" do
             context: ctx
           }
         })
-      end.to raise_error(OpenSSL::SSL::SSLError)
+      end.to raise_error(NATS::IO::TLSError) { |e| expect(e.cause).to be_a(OpenSSL::SSL::SSLError) }
     end
   end
 end

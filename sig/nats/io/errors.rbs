@@ -27,6 +27,9 @@ module NATS
     class Disconnected < NATS::IO::ClientError
     end
 
+    class ConnectionNotTLS < NATS::IO::ClientError
+    end
+
     class SyncSubRequired < NATS::IO::ClientError
     end
 
@@ -76,6 +79,9 @@ module NATS
     end
 
     class SecureConnWanted < NATS::IO::ConnectError
+    end
+
+    class TLSError < NATS::IO::ConnectError
     end
 
     class NoEchoNotSupported < NATS::IO::ConnectError
