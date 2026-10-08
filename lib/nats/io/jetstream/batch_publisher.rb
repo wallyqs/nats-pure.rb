@@ -263,6 +263,40 @@ module NATS
 
           ack
         end
+
+        # The headers of the options of a batch message.
+        # @api private
+        def msg_header(js, ttl: nil, stream: nil, msg_id: nil, expected_last_seq: nil,
+          expected_last_subject_seq: nil, expected_last_subject: nil)
+          header = {}
+          header[Header::MSG_TTL] = js.send(:msg_ttl, ttl) unless ttl.nil?
+          header[Header::EXPECTED_STREAM] = option_string(:stream, stream) unless stream.nil?
+          header[Header::MSG_ID] = option_string(:msg_id, msg_id) unless msg_id.nil?
+          header[Header::EXPECTED_LAST_SEQUENCE] = option_seq(:expected_last_seq, expected_last_seq) unless expected_last_seq.nil?
+          unless expected_last_subject.nil?
+            if expected_last_subject_seq.nil?
+              raise ArgumentError.new("nats: expected_last_subject needs expected_last_subject_seq")
+            end
+
+            header[Header::EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT] = option_string(:expected_last_subject, expected_last_subject)
+          end
+          unless expected_last_subject_seq.nil?
+            header[Header::EXPECTED_LAST_SUBJECT_SEQUENCE] = option_seq(:expected_last_subject_seq, expected_last_subject_seq)
+          end
+          header
+        end
+
+        def option_string(name, value)
+          return value if value.is_a?(String) && !value.empty?
+
+          raise ArgumentError.new("nats: invalid #{name} #{value.inspect}, expected a non-empty String")
+        end
+
+        def option_seq(name, value)
+          return value.to_s if value.is_a?(Integer) && value >= 0
+
+          raise ArgumentError.new("nats: invalid #{name} #{value.inspect}, expected an Integer from 0")
+        end
       end
 
       private
@@ -283,45 +317,13 @@ module NATS
       def batch_msg(msg, opts, seq, commit = nil)
         raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(NATS::Msg)
 
-        header = (msg.header || {}).merge(msg_options(**opts))
+        header = (msg.header || {}).merge(BatchPublisher.msg_header(@js, **opts))
         header.delete(Header::BATCH_COMMIT)
         header[Header::BATCH_ID] = @id
         header[Header::BATCH_SEQUENCE] = seq.to_s
         header[Header::BATCH_COMMIT] = commit if commit
 
         NATS::Msg.new(subject: msg.subject, data: msg.data || "", header: header)
-      end
-
-      def msg_options(ttl: nil, stream: nil, msg_id: nil, expected_last_seq: nil,
-        expected_last_subject_seq: nil, expected_last_subject: nil)
-        header = {}
-        header[Header::MSG_TTL] = @js.send(:msg_ttl, ttl) unless ttl.nil?
-        header[Header::EXPECTED_STREAM] = option_string(:stream, stream) unless stream.nil?
-        header[Header::MSG_ID] = option_string(:msg_id, msg_id) unless msg_id.nil?
-        header[Header::EXPECTED_LAST_SEQUENCE] = option_seq(:expected_last_seq, expected_last_seq) unless expected_last_seq.nil?
-        unless expected_last_subject.nil?
-          if expected_last_subject_seq.nil?
-            raise ArgumentError.new("nats: expected_last_subject needs expected_last_subject_seq")
-          end
-
-          header[Header::EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT] = option_string(:expected_last_subject, expected_last_subject)
-        end
-        unless expected_last_subject_seq.nil?
-          header[Header::EXPECTED_LAST_SUBJECT_SEQUENCE] = option_seq(:expected_last_subject_seq, expected_last_subject_seq)
-        end
-        header
-      end
-
-      def option_string(name, value)
-        return value if value.is_a?(String) && !value.empty?
-
-        raise ArgumentError.new("nats: invalid #{name} #{value.inspect}, expected a non-empty String")
-      end
-
-      def option_seq(name, value)
-        return value.to_s if value.is_a?(Integer) && value >= 0
-
-        raise ArgumentError.new("nats: invalid #{name} #{value.inspect}, expected an Integer from 0")
       end
     end
 

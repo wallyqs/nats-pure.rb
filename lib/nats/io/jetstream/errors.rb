@@ -332,12 +332,57 @@ module NATS
       # code is 429 (orbit.go ErrAtomicPublishTooManyInflight).
       class AtomicPublishTooManyInflight < BadRequest; ERR_CODE = 10210; end
 
+      # The errors with which the server refuses a fast batch publish
+      # (nats-server v2.14.0), also named as in orbit.go jetstreamext.
+
+      # When the stream does not have allow_batched (orbit.go
+      # ErrFastBatchNotEnabled).
+      class FastBatchNotEnabled < BadRequest; ERR_CODE = 10205; end
+
+      # When the reply subject of a fast batch message is not one of a fast
+      # batch (orbit.go ErrFastBatchInvalidPattern).
+      class FastBatchInvalidPattern < BadRequest; ERR_CODE = 10206; end
+
+      # When the fast batch ID is longer than 64 characters (orbit.go
+      # ErrFastBatchInvalidID).
+      class FastBatchInvalidID < BadRequest; ERR_CODE = 10207; end
+
+      # When the server does not know the fast batch of a message after the
+      # first, as the batch ended (orbit.go ErrFastBatchUnknownID).
+      class FastBatchUnknownID < BadRequest; ERR_CODE = 10208; end
+
+      # When a stream that mirrors another is given allow_batched.
+      class MirrorWithBatchPublish < BadRequest; ERR_CODE = 10209; end
+
+      # When the server has too many fast batches in flight; its status
+      # code is 429 (orbit.go ErrBatchPublishTooManyInflight).
+      class BatchPublishTooManyInflight < BadRequest; ERR_CODE = 10211; end
+
+      # Passed to the error handler of a FastPublisher when the server
+      # reports that messages of the batch did not reach it, like
+      # ErrFastBatchGapDetected of orbit.go jetstreamext. The messages from
+      # expected_last_seq up to current_seq, which is not included, were
+      # lost.
+      class FastBatchGapDetected < Error
+        attr_reader :expected_last_seq, :current_seq
+
+        def initialize(expected_last_seq = nil, current_seq = nil)
+          @expected_last_seq = expected_last_seq
+          @current_seq = current_seq
+          msg = "nats: fast batch gap detected"
+          msg += ": expected last sequence #{expected_last_seq}; current sequence #{current_seq}" if current_seq
+          super(msg)
+        end
+      end
+
       # The batch publish errors by error code.
       BATCH_PUBLISH_ERRORS = [
         BatchPublishNotEnabled, BatchPublishMissingSeq, BatchPublishIncomplete,
         BatchPublishUnsupportedHeader, BatchPublishInvalidID, MirrorWithAtomicPublish,
         BatchPublishExceedsLimit, BatchPublishInvalidCommit, BatchPublishDuplicateMsgID,
-        AtomicPublishTooManyInflight
+        FastBatchNotEnabled, FastBatchInvalidPattern, FastBatchInvalidID,
+        FastBatchUnknownID, MirrorWithBatchPublish, AtomicPublishTooManyInflight,
+        BatchPublishTooManyInflight
       ].to_h { |klass| [klass::ERR_CODE, klass] }.freeze
 
       # When a fetch from a consumer with the pinned_client priority policy
