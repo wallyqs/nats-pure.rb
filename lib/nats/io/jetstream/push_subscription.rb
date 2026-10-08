@@ -34,7 +34,11 @@ module NATS
     # the flow control requests once the messages that came before them
     # were delivered, and, when the consumer has idle heartbeats, reports a
     # NATS::JetStream::Error::ConsumerNotActive to the error callback of the
-    # connection whenever nothing came for two of them.
+    # connection whenever nothing came for two of them. When an idle
+    # heartbeat tells that the consumer delivered up to another sequence
+    # than the last message that came, it reports a
+    # NATS::JetStream::Error::ConsumerSequenceMismatch to the error callback,
+    # like ErrConsumerSequenceMismatch of nats.go.
     #
     # @!visibility public
     module PushSubscription
@@ -66,6 +70,8 @@ module NATS
         synchronize do
           @js_received += 1
           @js_active = true
+          # Kept to check the sequences against the next idle heartbeat.
+          @js_last_msg = msg
         end
         super
       end
@@ -98,6 +104,7 @@ module NATS
           @js_fc_reply = nil
           @js_fc_seq = 0
           @js_active = true
+          @js_last_msg = nil
         end
         return unless heartbeat.is_a?(Numeric) && heartbeat.positive?
 
@@ -115,6 +122,7 @@ module NATS
       end
 
       def handle_control_msg(msg)
+        heartbeat = msg.reply.to_s.empty?
         reply = synchronize do
           @js_active = true
           if !msg.reply.to_s.empty?
@@ -132,6 +140,34 @@ module NATS
           end
         end
         respond_flow_control(reply)
+        check_sequence(msg) if heartbeat
+      end
+
+      # check_sequence compares the last consumer sequence that an idle
+      # heartbeat carries with the one of the last message that came, and
+      # reports a mismatch, telling from where the consumer could resume,
+      # like checkForSequenceMismatch of nats.go. The members of a queue
+      # group each get only some of the messages, so are not checked.
+      def check_sequence(heartbeat)
+        last = synchronize { @js_last_msg }
+        return if last.nil? || !queue.to_s.empty?
+
+        meta = begin
+          last.metadata
+        rescue JetStream::Error::NotJSMessage
+          return
+        end
+        return if meta.nil?
+
+        ldseq = heartbeat.header[JS::Header::LastConsumerSeq].to_s
+        return if ldseq == meta.sequence.consumer.to_s
+
+        err = JetStream::Error::ConsumerSequenceMismatch.new(
+          stream_resume_sequence: meta.sequence.stream,
+          consumer_sequence: meta.sequence.consumer,
+          last_consumer_sequence: ldseq.to_i
+        )
+        @nc.synchronize { @nc.send(:err_cb_call, @nc, err, self) }
       end
 
       # delivered! counts a message handed to the callback or returned by

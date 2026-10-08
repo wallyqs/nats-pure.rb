@@ -64,6 +64,14 @@ module NATS
       class ConsumerNotActive < NATS::JetStream::Error
       end
 
+      class ConsumerSequenceMismatch < NATS::JetStream::Error
+        attr_reader stream_resume_sequence: Integer
+        attr_reader consumer_sequence: Integer
+        attr_reader last_consumer_sequence: Integer
+
+        def initialize: (?stream_resume_sequence: Integer, ?consumer_sequence: Integer, ?last_consumer_sequence: Integer) -> void
+      end
+
       class MsgIteratorClosed < NATS::JetStream::Error
       end
 

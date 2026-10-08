@@ -79,6 +79,24 @@ module NATS
       # reported to the error callback of the connection.
       class ConsumerNotActive < Error; end
 
+      # When an idle heartbeat of a push consumer tells that it delivered up
+      # to another consumer sequence than the last message that came to the
+      # subscription, reported to the error callback of the connection, like
+      # ErrConsumerSequenceMismatch of nats.go. The consumer could resume
+      # from stream_resume_sequence.
+      class ConsumerSequenceMismatch < Error
+        attr_reader :stream_resume_sequence, :consumer_sequence, :last_consumer_sequence
+
+        def initialize(stream_resume_sequence: 0, consumer_sequence: 0, last_consumer_sequence: 0)
+          @stream_resume_sequence = stream_resume_sequence
+          @consumer_sequence = consumer_sequence
+          @last_consumer_sequence = last_consumer_sequence
+          super("nats: sequence mismatch for consumer at sequence #{consumer_sequence} " \
+                "(#{last_consumer_sequence - consumer_sequence} sequences behind), " \
+                "should restart consumer from stream sequence #{stream_resume_sequence}")
+        end
+      end
+
       # When the messages of a MessagesContext are read after it was stopped
       # or drained, or the connection closed.
       class MsgIteratorClosed < Error; end
