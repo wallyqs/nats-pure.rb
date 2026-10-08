@@ -232,7 +232,8 @@ module NATS
       #   server such as PinIdMismatch, errors raised by the block, and those that
       #   stop the consumption: ConsumerDeleted, an APIError for an invalid pull, and
       #   NATS::IO::ConnectionClosedError. By default, the error callback of the
-      #   connection gets them.
+      #   connection gets them. A handler of two arguments gets the
+      #   ConsumeContext and the error, like ConsumeErrHandlerFunc of nats.go.
       # @option params [String] :group, :min_pending, :min_ack_pending, :priority As of {#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
       # @return [NATS::JetStream::ConsumeContext]

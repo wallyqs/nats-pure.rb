@@ -521,6 +521,15 @@ module NATS
         @messages
       end
 
+      # takes_context? tells whether an error handler takes two arguments,
+      # the context and the error, rather than the error only: whether it
+      # requires two, or more with optional ones.
+      # @!visibility private
+      def self.takes_context?(handler)
+        arity = handler.respond_to?(:arity) ? handler.arity : handler.method(:call).arity
+        arity == 2 || arity <= -3
+      end
+
       private
 
       def run
@@ -554,10 +563,15 @@ module NATS
       end
 
       # report passes an error to the error handler, or else to the error
-      # callback of the connection.
+      # callback of the connection. A handler that takes two arguments gets
+      # the context too, like ConsumeErrHandlerFunc of nats.go.
       def report(err)
         if @error_handler
-          @error_handler.call(err)
+          if ConsumeContext.takes_context?(@error_handler)
+            @error_handler.call(self, err)
+          else
+            @error_handler.call(err)
+          end
         else
           @nc.synchronize { @nc.send(:err_cb_call, @nc, err, nil) }
         end

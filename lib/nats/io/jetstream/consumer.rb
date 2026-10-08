@@ -198,7 +198,8 @@ module NATS
       # @option params [Proc] :error_handler Called with the errors met while
       #   consuming, like ConsumeErrHandler of nats.go: missing heartbeats, a
       #   deleted consumer, which stops the consumption, and those raised by
-      #   the block; the error callback of the connection by default.
+      #   the block; the error callback of the connection by default. A
+      #   handler of two arguments gets the context and the error.
       # @yieldparam msg [NATS::Msg]
       # @return [NATS::JetStream::PushConsumeContext]
       # @raise [NATS::JetStream::Error::HandlerRequired] When there is no block.
