@@ -33,6 +33,15 @@ module NATS
     # ErrMarshalResponse of nats.go micro.
     class MarshalResponseError < Error; end
 
+    # When a response cannot be sent, like ErrRespond of nats.go micro. Its
+    # cause is the error of the client, such as
+    # NATS::IO::ConnectionClosedError.
+    class RespondError < Error; end
+
+    # When respond_with_error is given an error without a code or a
+    # description, like ErrArgRequired of nats.go micro.
+    class ArgRequiredError < Error; end
+
     # NATSError is passed to the error handler of a service when one of the
     # service's subscriptions reports an asynchronous error, like a slow
     # consumer or a NATS error raised in an endpoint handler, like the
@@ -65,7 +74,8 @@ module NATS
         case error
         when Exception
           @code = 500
-          @message = error.message
+          # An error that has an empty message is named by its class.
+          @message = error.message.empty? ? error.class.name : error.message
           @data = ""
         when Hash
           @code = error[:code]

@@ -297,6 +297,16 @@ client.request("divide", [5, 0].to_json)
 Headers given to `respond_with_error` with `headers:` are added to the error headers,
 and can override them.
 
+Like nats.go micro, an error without a code or a description, such as `{code: 400}` or `""`,
+makes `respond_with_error` raise `NATS::Service::ArgRequiredError` (`ErrArgRequired`), and
+nothing is sent. An exception with an empty message is described by its class name.
+
+When a response cannot be sent, as for a request without a reply subject, `respond`,
+`respond_json` and `respond_with_error` raise `NATS::Service::RespondError` (`ErrRespond`),
+whose `cause` is the error of the client. A handler that rescues it goes on, and the endpoint
+counts the error, as in nats.go micro; one that does not stops the service, like any other
+NATS error raised in a handler.
+
 ## Stats
 
 A service collects different stats during its work, which you can access via `stats` method:

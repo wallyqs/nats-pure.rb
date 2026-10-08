@@ -5,6 +5,8 @@ module NATS
 
       def respond_json: (untyped obj, ?headers: Hash[String, untyped]?) -> void
 
+      def respond_msg: (NATS::Msg msg) -> void
+
       def respond_with_error: (Exception | String | Hash[Symbol, untyped] error, ?headers: Hash[String, untyped]?) -> void
     end
 
