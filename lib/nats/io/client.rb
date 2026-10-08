@@ -121,6 +121,19 @@ module NATS
     SUB_OP = "SUB"
     EMPTY_MSG = ""
 
+    # Errors for the -ERR texts of the server, by their lowercase prefix.
+    SERVER_ERRORS = {
+      "permissions violation" => NATS::IO::PermissionViolation,
+      "maximum subscriptions exceeded" => NATS::IO::MaxSubscriptionsExceeded,
+      "maximum connections exceeded" => NATS::IO::MaxConnectionsExceeded,
+      "maximum account active connections exceeded" => NATS::IO::MaxAccountConnectionsExceeded,
+      "authorization violation" => NATS::IO::AuthorizationViolation,
+      "user authentication expired" => NATS::IO::AuthenticationExpired,
+      "user authentication revoked" => NATS::IO::AuthenticationRevoked,
+      "account authentication expired" => NATS::IO::AccountAuthenticationExpired
+    }.freeze
+    private_constant :SERVER_ERRORS
+
     INSTANCES = ObjectSpace::WeakMap.new # tracks all alive client instances
     private_constant :INSTANCES
 
@@ -511,6 +524,7 @@ module NATS
 
       # Accounting
       msg_size = msg.bytesize
+      check_max_payload!(msg_size)
       @stats[:out_msgs] += 1
       @stats[:out_bytes] += msg_size
 
@@ -522,6 +536,9 @@ module NATS
     def publish_msg(msg)
       raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
       raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
+      if msg.header && !@server_info.empty? && !@server_info[:headers]
+        raise NATS::IO::HeadersNotSupported.new("nats: headers not supported by this server")
+      end
 
       check_reconnect_buf!
 
@@ -542,8 +559,10 @@ module NATS
         hdr << CR_LF
         hdr_len = hdr.bytesize
         total_size = msg_size + hdr_len
+        check_max_payload!(total_size)
         send_command("HPUB #{msg.subject} #{msg.reply} #{hdr_len} #{total_size}\r\n#{hdr}#{msg.data}\r\n")
       else
+        check_max_payload!(msg_size)
         send_command("PUB #{msg.subject} #{msg.reply} #{msg_size}\r\n#{msg.data}\r\n")
       end
 
@@ -554,6 +573,11 @@ module NATS
     # messages to a callback.
     def subscribe(subject, opts = {}, &callback)
       raise NATS::IO::ConnectionDrainingError.new("nats: connection draining") if draining?
+      # Whitespace would change the meaning of the SUB protocol line, so it is
+      # refused like in nats.go; other invalid subjects are left to the server.
+      subj = subject.to_s
+      raise NATS::IO::BadSubject.new("nats: invalid subject") if subj.empty? || subj.match?(/[ \t\r\n]/)
+      raise NATS::IO::BadQueueName.new("nats: invalid queue name") if opts[:queue].to_s.match?(/[ \t\r\n]/)
 
       sid = nil
       sub = nil
@@ -775,6 +799,8 @@ module NATS
 
     # Send a ping and wait for a pong back within a timeout.
     def flush(timeout = 10)
+      raise NATS::IO::BadTimeout.new("nats: timeout invalid") unless timeout.is_a?(Numeric) && timeout > 0
+
       # Schedule sending a PING, and block until we receive PONG back,
       # or raise a timeout in case the response is past the deadline.
       pong = @pongs.new_cond
@@ -899,6 +925,12 @@ module NATS
     # callback option to know when the connection has moved from draining to closed.
     def drain
       return if draining?
+
+      # Like nats.go, there is nothing to drain while (re)connecting.
+      if connecting? || reconnecting?
+        close
+        raise NATS::IO::ConnectionReconnecting.new("nats: connection reconnecting")
+      end
 
       synchronize do
         @drain_t ||= Thread.new { do_drain }
@@ -1106,22 +1138,37 @@ module NATS
 
     # Handles protocol errors being sent by the server.
     def process_err(err)
-      # In case of permissions violation then dispatch the error callback
-      # while holding the lock.
       e = synchronize do
         current = server_pool.first
-        if err =~ /'Stale Connection'/
-          @last_err = NATS::IO::StaleConnectionError.new(err)
-        elsif current && current[:auth_required]
-          # We cannot recover from auth errors so mark it to avoid
-          # retrying to unecessarily next time.
-          current[:error_received] = true
-          @last_err = NATS::IO::AuthError.new(err)
-        else
-          @last_err = NATS::IO::ServerError.new(err)
+        @last_err = server_error_for(err, current && current[:auth_required])
+
+        # We cannot recover from auth errors so mark it to avoid
+        # retrying to unecessarily next time.
+        current[:error_received] = true if current && @last_err.is_a?(NATS::IO::AuthError)
+
+        # Like nats.go, the connection stays up after a permissions
+        # violation or when a subscription is refused, so only dispatch the
+        # error callback, while holding the lock.
+        if @last_err.is_a?(NATS::IO::PermissionViolation) || @last_err.is_a?(NATS::IO::MaxSubscriptionsExceeded)
+          err_cb_call(self, @last_err, nil) if @err_cb
+          return
         end
+
+        @last_err
       end
       process_op_error(e)
+    end
+
+    # Maps the text of an -ERR from the server to an error, like nats.go;
+    # others are an AuthError when the server requires auth, otherwise a
+    # ServerError.
+    def server_error_for(err, auth_required)
+      text = err.to_s.strip.delete_prefix("'").delete_suffix("'").strip.downcase
+      return NATS::IO::StaleConnectionError.new(err) if text == "stale connection"
+
+      _, klass = SERVER_ERRORS.find { |prefix, _| text.start_with?(prefix) }
+      klass ||= auth_required ? NATS::IO::AuthError : NATS::IO::ServerError
+      klass.new(err)
     end
 
     def process_msg(subject, sid, reply, data, header)
@@ -1251,6 +1298,15 @@ module NATS
     # While reconnecting, publishes are buffered until the connection is back,
     # up to reconnect_buf_size bytes, like nats.go; a negative size disables
     # the buffering. The buffer also holds at most MAX_PENDING_SIZE commands.
+    # Like nats.go, refuse messages that the server would refuse, once its
+    # max_payload is known.
+    def check_max_payload!(size)
+      max_payload = @server_info[:max_payload]
+      if max_payload && size > max_payload
+        raise NATS::IO::MaxPayload.new("nats: maximum payload exceeded")
+      end
+    end
+
     def check_reconnect_buf!
       return unless reconnecting?
 
@@ -1629,35 +1685,36 @@ module NATS
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line || line.empty?
-        raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not received")
+        raise NATS::IO::NoInfoReceived.new("nats: protocol exception, INFO not received")
       end
 
       if (match = line.match(NATS::Protocol::INFO))
         info_json = match.captures.first
         process_info(info_json)
       else
-        raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
+        raise NATS::IO::NoInfoReceived.new("nats: protocol exception, INFO not valid")
       end
 
       if server_using_secure_connection? && client_using_secure_connection?
         @io.setup_tls! unless @options[:tls_handshake_first]
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
       elsif server_using_secure_connection? && !client_using_secure_connection? && (@uri.scheme != "ws")
-        raise NATS::IO::ConnectError.new("TLS/SSL required by server")
+        raise NATS::IO::SecureConnRequired.new("TLS/SSL required by server")
       # Server < v2.9.19 requiring TLS/SSL over websocket but not requiring it over standard protocol
       # doesn't send `tls_required` in its INFO so we need to check the URI scheme for WebSocket.
       elsif client_using_secure_connection? && !server_using_secure_connection? && (@uri.scheme != "wss")
-        raise NATS::IO::ConnectError.new("TLS/SSL not supported by server")
+        raise NATS::IO::SecureConnWanted.new("TLS/SSL not supported by server")
       else
         # Otherwise, use a regular connection.
       end
 
       # Send connect and process synchronously. If using TLS,
       # it should have handled upgrading at this point.
-      @io.write(connect_command)
-
-      # Send ping/pong after connect
-      @io.write(PING_REQUEST)
+      # Send ping/pong after connect, in the same write: a server that
+      # refuses the connection, as when it has too many, closes it right
+      # after its -ERR, so that a second write would fail before the
+      # -ERR is read.
+      @io.write(connect_command + PING_REQUEST)
 
       next_op = @io.read_line(options[:connect_timeout])
       if @options[:verbose]
@@ -1670,11 +1727,7 @@ module NATS
       when NATS::Protocol::PONG
         # do nothing
       when NATS::Protocol::ERR
-        if @server_info[:auth_required]
-          raise NATS::IO::AuthError.new($1)
-        else
-          raise NATS::IO::ServerError.new($1)
-        end
+        raise server_error_for($1, @server_info[:auth_required])
       else
         raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}")
       end
