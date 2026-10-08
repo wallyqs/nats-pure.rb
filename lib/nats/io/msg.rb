@@ -91,20 +91,24 @@ module NATS
       @subject.to_s.bytesize + @reply.to_s.bytesize + header_bytesize + @data.to_s.bytesize
     end
 
+    # Responds to the message with data, published to its reply subject,
+    # like Respond of nats.go: without the headers of the message.
+    # @param data [String] The data of the response.
     def respond(data = "")
       return unless @nc
-      if header
-        dmsg = dup
-        dmsg.subject = reply
-        dmsg.data = data
-        @nc.publish_msg(dmsg)
-      else
-        @nc.publish(reply, data)
-      end
+
+      @nc.publish(reply, data)
     end
 
+    # Responds to the message with msg, which may have headers, like
+    # RespondMsg of nats.go: msg is published to the reply subject of the
+    # message, which becomes its subject.
+    # @param msg [NATS::Msg] The response.
     def respond_msg(msg)
       return unless @nc
+      raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
+
+      msg.subject = reply
       @nc.publish_msg(msg)
     end
 
