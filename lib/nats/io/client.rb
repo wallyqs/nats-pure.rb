@@ -121,6 +121,10 @@ module NATS
     SUB_OP = "SUB"
     EMPTY_MSG = ""
 
+    # Replaces the password of the URL in connected_url_redacted.
+    REDACTED = "xxxxx"
+    private_constant :REDACTED
+
     # Errors for the -ERR texts of the server, by their lowercase prefix.
     SERVER_ERRORS = {
       "permissions violation" => NATS::IO::PermissionViolation,
@@ -902,6 +906,124 @@ module NATS
       connected? ? @uri : nil
     end
 
+    # The URL of the connected server, with its password, or its token,
+    # replaced by "xxxxx", like ConnectedUrlRedacted of nats.go.
+    # @return [String, nil] nil unless connected.
+    def connected_url_redacted
+      synchronize do
+        return nil unless connected? && @uri
+
+        uri = @uri.dup
+        if uri.password
+          uri.password = REDACTED
+        elsif uri.user
+          uri.user = REDACTED
+        end
+        uri.to_s
+      end
+    end
+
+    # The address of the connected server, like ConnectedAddr of nats.go.
+    # @return [String, nil] The IP address and port, as in "127.0.0.1:4222"
+    #   or "[::1]:4222", or nil unless connected.
+    def connected_addr
+      socket_address(:remote_address)
+    end
+
+    # The local address of the connection, like LocalAddr of nats.go.
+    # @return [String, nil] The IP address and port, as in
+    #   "127.0.0.1:52144", or nil unless connected.
+    def local_addr
+      socket_address(:local_address)
+    end
+
+    # The number of subscriptions of the connection, like NumSubscriptions
+    # of nats.go; it includes the one that receives the responses to requests.
+    # @return [Integer]
+    def num_subscriptions
+      synchronize { @subs.size }
+    end
+
+    # The bytes of the commands that are waiting to be sent to the server,
+    # as while reconnecting, like Buffered of nats.go.
+    # @return [Integer]
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    def buffered
+      synchronize do
+        raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+
+        @pending_size
+      end
+    end
+
+    # The id of the connected server, like ConnectedServerId of nats.go.
+    # @return [String, nil] nil unless connected.
+    def connected_server_id
+      connected_server_info(:server_id)
+    end
+
+    # The name of the connected server, like ConnectedServerName of nats.go.
+    # @return [String, nil] nil unless connected.
+    def connected_server_name
+      connected_server_info(:server_name)
+    end
+
+    # The version of the connected server, like ConnectedServerVersion of nats.go.
+    # @return [String, nil] nil unless connected.
+    def connected_server_version
+      connected_server_info(:version)
+    end
+
+    # The name of the cluster of the connected server, like
+    # ConnectedClusterName of nats.go.
+    # @return [String, nil] nil unless connected, or when the server is not
+    #   in a cluster.
+    def connected_cluster_name
+      connected_server_info(:cluster)
+    end
+
+    # The id that the server gave the connection, like GetClientID of
+    # nats.go. It may change when the connection reconnects.
+    # @return [Integer, nil] nil when the server does not tell it.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    def client_id
+      server_info_unless_closed(:client_id)
+    end
+
+    # The IP address of the connection as the server sees it, like
+    # GetClientIP of nats.go.
+    # @return [String, nil] nil when the server does not tell it.
+    # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
+    def client_ip
+      server_info_unless_closed(:client_ip)
+    end
+
+    # The largest message, in bytes, that the server takes, like MaxPayload of nats.go.
+    # @return [Integer, nil] nil until connected.
+    def max_payload
+      synchronize { @server_info[:max_payload] }
+    end
+
+    # Whether the server supports headers, like HeadersSupported of nats.go.
+    def headers_supported?
+      synchronize { !!@server_info[:headers] }
+    end
+
+    # Whether the server requires authentication, like AuthRequired of nats.go.
+    def auth_required?
+      synchronize { !!@server_info[:auth_required] }
+    end
+
+    # Whether the server requires TLS, like TLSRequired of nats.go.
+    def tls_required?
+      synchronize { !!(@server_info[:tls_required] || @server_info[:ssl_required]) }
+    end
+
+    # Whether the server has JetStream enabled.
+    def jetstream?
+      synchronize { !!@server_info[:jetstream] }
+    end
+
     def disconnected?
       !@status or @status == DISCONNECTED
     end
@@ -934,6 +1056,23 @@ module NATS
 
       is_draining
     end
+
+    # The callbacks set with on_error, on_disconnect, on_reconnect,
+    # on_close, on_connect, on_discovered_servers and on_lame_duck_mode,
+    # like ErrorHandler, DisconnectErrHandler and the like of nats.go.
+    def error_handler = @err_cb
+
+    def disconnect_handler = @disconnect_cb
+
+    def reconnect_handler = @reconnect_cb
+
+    def close_handler = @close_cb
+
+    def connect_handler = @connect_cb
+
+    def discovered_servers_handler = @discovered_servers_cb
+
+    def lame_duck_mode_handler = @lame_duck_mode_cb
 
     def on_error(&callback)
       @err_cb = callback
@@ -1015,6 +1154,28 @@ module NATS
     end
 
     private
+
+    def connected_server_info(key)
+      synchronize { connected? ? @server_info[key] : nil }
+    end
+
+    def server_info_unless_closed(key)
+      synchronize do
+        raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+
+        @server_info[key]
+      end
+    end
+
+    def socket_address(kind)
+      synchronize do
+        return nil unless connected? && @io
+
+        @io.public_send(kind)
+      end
+    rescue IOError, SystemCallError
+      nil
+    end
 
     # Rejects auth options that cannot be used together, like nats.go.
     def validate_auth_options!
@@ -2485,7 +2646,22 @@ module NATS
         @socket.closed?
       end
 
+      # The address of the server, as in "127.0.0.1:4222".
+      def remote_address
+        raw_socket.remote_address.inspect_sockaddr
+      end
+
+      # The local address of the connection, as in "127.0.0.1:52144".
+      def local_address
+        raw_socket.local_address.inspect_sockaddr
+      end
+
       private
+
+      # The TCP socket, also under TLS.
+      def raw_socket
+        @socket.respond_to?(:to_io) ? @socket.to_io : @socket
+      end
 
       # Performs the TLS handshake, giving up after the connect timeout.
       def tls_handshake(tls_socket)
