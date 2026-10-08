@@ -69,6 +69,11 @@ Options can contain:
 - `:metadata` (optional) - a hash containing additional information about an endpoint.
 - `:queue` (optional) - an override for a service and group.
 - `:queue_group_disabled` (optional) - `true` to subscribe without a queue group.
+- `:pending_msgs_limit` and `:pending_bytes_limit` (optional) - the limits of the requests,
+and of their bytes, that wait to be handled, like `WithEndpointPendingLimits` of nats.go micro.
+By default, those of the client's subscriptions. Once one is reached, requests are dropped and the
+service stops with a slow consumer error (see [Service Lifecycle](#service-lifecycle)). A limit
+that is not a positive Integer raises `NATS::Service::InvalidPendingLimitsError`.
 
 After creating an endpoint you can publish a request on its subject:
 

@@ -99,8 +99,16 @@ module NATS
     class Endpoint
       attr_reader :name, :service, :subject, :metadata, :queue, :stats
 
+      # The limits of the messages and bytes that wait to be handled, like
+      # WithEndpointPendingLimits of nats.go micro, or nil for those of the
+      # client's subscriptions. Once one is reached, requests are dropped
+      # and the service stops with a slow consumer error.
+      attr_reader :pending_msgs_limit, :pending_bytes_limit
+
       def initialize(name:, options:, parent:, &block)
         validate(name, options)
+        @pending_msgs_limit = pending_limit(:pending_msgs_limit, options)
+        @pending_bytes_limit = pending_limit(:pending_bytes_limit, options)
 
         @name = name
 
@@ -154,6 +162,14 @@ module NATS
         )
       end
 
+      def pending_limit(key, options)
+        limit = options[key]
+        return if limit.nil?
+        return limit if limit.is_a?(Integer) && limit.positive?
+
+        raise InvalidPendingLimitsError, "#{key} must be a positive Integer, got #{limit.inspect}"
+      end
+
       def build_subject(parent, options)
         subject = options[:subject] || name
 
@@ -161,7 +177,12 @@ module NATS
       end
 
       def create_handler(block)
-        service.client.subscribe(subject, queue: (queue unless queue_group_disabled?)) do |msg|
+        opts = {
+          queue: (queue unless queue_group_disabled?),
+          pending_msgs_limit: pending_msgs_limit,
+          pending_bytes_limit: pending_bytes_limit
+        }.compact
+        service.client.subscribe(subject, opts) do |msg|
           started_at = Time.now
 
           req = Request.from_msg(self, msg)
