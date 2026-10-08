@@ -94,7 +94,11 @@ module NATS
 
       def subscribe_monitor(subject, block)
         service.client.subscribe(subject) do |message|
-          message.respond(block.call.to_json)
+          # Responds without the request's headers, and only when asked
+          # for a response: a failed response would stop the service.
+          next if message.reply.to_s.empty?
+
+          service.client.publish(message.reply, block.call.to_json)
         end
       rescue => error
         service.stop(error)
