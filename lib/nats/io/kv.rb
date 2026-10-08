@@ -33,10 +33,19 @@ module NATS
     # TTL or a purge (requires nats-server v2.11.0).
     MARKER_REASON = "Nats-Marker-Reason"
 
-    VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+$/
+    VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+\z/
     VALID_KEY_RE = /\A[-\/_=.a-zA-Z0-9]+$/
 
     class << self
+      # validate_bucket_name raises an error unless the name is that of a
+      # bucket: letters, digits, "_" and "-", like nats.go.
+      # @raise [BucketRequiredError] When the name is nil or empty.
+      # @raise [InvalidBucketNameError] When the name is not that of a bucket.
+      def validate_bucket_name(bucket)
+        raise BucketRequiredError if bucket.nil? || bucket == ""
+        raise InvalidBucketNameError unless bucket.is_a?(String) && bucket.match?(VALID_BUCKET_RE)
+      end
+
       def is_valid_key(key)
         if key.nil?
           false
@@ -136,6 +145,7 @@ module NATS
     end
 
     # create will add the key/value pair iff it does not exist.
+    # @raise [KeyExistsError] When the key exists.
     # @param params [Hash] Options of the key.
     # @option params [Integer, Symbol] :ttl Seconds after which the server
     #   removes the key, or :never, like KeyTTL of nats.go. The bucket needs
@@ -143,9 +153,8 @@ module NATS
     def create(key, value, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
-      pa = nil
       begin
-        pa = update_revision(key, value, 0, params[:ttl])
+        update_revision(key, value, 0, params[:ttl])
       rescue KeyWrongLastSequenceError => err
         # In case of attempting to recreate an already deleted key,
         # the client would get a KeyWrongLastSequenceError.  When this happens,
@@ -157,17 +166,15 @@ module NATS
           #   so we need to double check.
           #
           _get(key)
-
-          # No exception so not a deleted key, so reraise the original KeyWrongLastSequenceError.
-          # If it was deleted then the error exception will contain metadata
-          # to recreate using the last revision.
-          raise err
-        rescue KeyDeletedError => err
-          pa = update_revision(key, value, err.entry.revision, params[:ttl])
+        rescue KeyDeletedError => deleted
+          # The error contains the metadata to recreate the deleted key
+          # using its last revision.
+          return update_revision(key, value, deleted.entry.revision, params[:ttl])
         end
-      end
 
-      pa
+        # Not a deleted key, so the key exists, like ErrKeyExists of nats.go.
+        raise KeyExistsError.new(err.to_s.delete_prefix("nats: "))
+      end
     end
 
     EXPECTED_LAST_SUBJECT_SEQUENCE = "Nats-Expected-Last-Subject-Sequence"

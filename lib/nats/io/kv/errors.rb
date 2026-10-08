@@ -15,6 +15,7 @@
 #
 
 require_relative "../errors"
+require_relative "../jetstream/errors"
 
 module NATS
   class KeyValue
@@ -57,6 +58,55 @@ module NATS
 
       def to_s
         "nats: #{@msg}"
+      end
+    end
+
+    # When a key that create is to add exists, like ErrKeyExists of nats.go.
+    # It is a KeyWrongLastSequenceError, which create raised before, with
+    # the same message.
+    class KeyExistsError < KeyWrongLastSequenceError; end
+
+    # When a bucket name is invalid, like ErrInvalidBucketName of nats.go:
+    # it is not made of letters, digits, "_" and "-". It is an
+    # ArgumentError, as creating a bucket raised for most invalid names
+    # before.
+    class InvalidBucketNameError < ArgumentError
+      def initialize(msg = "nats: invalid bucket name")
+        super
+      end
+    end
+
+    # When a bucket name is nil or empty, like ErrBucketRequired of nats.go.
+    # It is an InvalidBucketNameError, which nats.go returns for one.
+    class BucketRequiredError < InvalidBucketNameError
+      def initialize(msg = "nats: bucket required")
+        super
+      end
+    end
+
+    # When there is no config for the bucket to create or update, like
+    # ErrKeyValueConfigRequired of nats.go.
+    class KeyValueConfigRequiredError < ArgumentError
+      def initialize(msg = "nats: config required")
+        super
+      end
+    end
+
+    # When a bucket is created with the name of a bucket that has a
+    # different configuration, like ErrBucketExists of nats.go. It is the
+    # JetStream::Error::StreamNameAlreadyInUse of the bucket's stream, which
+    # create_key_value raised before.
+    class BucketExistsError < NATS::JetStream::Error::StreamNameAlreadyInUse
+      # @return [String] The name of the bucket.
+      attr_reader :bucket
+
+      def initialize(params = {})
+        super
+        @bucket = params[:bucket]
+      end
+
+      def to_s
+        "nats: bucket name already in use: #{@bucket}"
       end
     end
 
