@@ -90,6 +90,9 @@ module NATS
     class ConnectionReconnecting < NATS::IO::ClientError
     end
 
+    class ServerNotInPool < NATS::IO::ClientError
+    end
+
     class ConnectError < NATS::IO::Error
     end
 

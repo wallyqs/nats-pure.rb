@@ -52,6 +52,11 @@ module NATS
     # ErrInvalidArg of nats.go. An ArgumentError, as raised before.
     class InvalidArg < ArgumentError; end
 
+    # When reconnect_to_server chose a server that is not in the server
+    # pool, like ErrServerNotInPool of nats.go. The client picks the next
+    # server itself.
+    class ServerNotInPool < ClientError; end
+
     # When a connection cannot do what was asked while it reconnects.
     class ConnectionReconnecting < ClientError; end
 
