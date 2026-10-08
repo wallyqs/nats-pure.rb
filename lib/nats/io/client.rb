@@ -252,6 +252,8 @@ module NATS
 
       # Accounting
       @pending_size = 0
+      # Keeps the commands that the flusher and publishers write in order.
+      @flush_lock = Mutex.new
       @stats = {
         in_msgs: 0,
         out_msgs: 0,
@@ -1318,6 +1320,12 @@ module NATS
       if @options[:ws_headers] && !@options[:ws_headers].is_a?(Hash)
         raise ArgumentError, "nats: ws_headers must be a Hash"
       end
+      if @options[:write_buffer_size] && !(@options[:write_buffer_size].is_a?(Integer) && @options[:write_buffer_size] > 0)
+        raise ArgumentError, "nats: write_buffer_size must be a positive Integer"
+      end
+      if @options[:flusher_timeout] && !(@options[:flusher_timeout].is_a?(Numeric) && @options[:flusher_timeout] > 0)
+        raise ArgumentError, "nats: flusher_timeout must be a positive number of seconds"
+      end
       if (dialer = @options[:custom_dialer]) && !dialer.respond_to?(:dial) && !dialer.respond_to?(:call)
         raise ArgumentError, "nats: custom_dialer must respond to dial or call"
       end
@@ -1662,7 +1670,20 @@ module NATS
       @pending_size += command.bytesize
       @pending_queue << command
 
-      # TODO: kick flusher here in case pending_size growing large
+      # Like nats.go, once write_buffer_size bytes are pending the
+      # publisher writes them out itself, rather than buffering more.
+      limit = @options[:write_buffer_size]
+      flush_pending! if limit && @pending_size >= limit && @status == CONNECTED
+    end
+
+    # Writes what is pending from the thread of the caller. A failed write
+    # is handled as the flusher does, but from a thread of its own, as
+    # handling it may stop the thread it runs in.
+    def flush_pending!
+      write_pending
+      synchronize { @pending_size = 0 }
+    rescue => e
+      Thread.new { handle_flush_error(e) }
     end
 
     # Auto unsubscribes the server by sending UNSUB command and throws away
@@ -2048,24 +2069,36 @@ module NATS
     end
 
     def force_flush!
+      write_pending
+    rescue => e
+      handle_flush_error(e)
+      nil
+    end
+
+    # Writes the pending commands, in order, waiting up to flusher_timeout
+    # for the socket to take them.
+    def write_pending
       # FIXME: should limit how many commands to take at once
       # since producers could be adding as many as possible
       # until reaching the max pending queue size.
-      cmds = []
-      cmds << @pending_queue.pop until @pending_queue.empty?
-      if @io
-        begin
-          @io.write(cmds.join) unless cmds.empty?
-        rescue => e
-          synchronize do
-            @last_err = e
-            err_cb_call(self, e, nil) if @err_cb
-          end
+      @flush_lock.synchronize do
+        # Without a connection they stay pending, for a reconnect to send.
+        io = @io
+        return unless io
 
-          process_op_error(e)
-          nil
-        end
+        cmds = []
+        cmds << @pending_queue.pop until @pending_queue.empty?
+        io.write(cmds.join, @options[:flusher_timeout]) unless cmds.empty?
       end
+    end
+
+    def handle_flush_error(e)
+      synchronize do
+        @last_err = e
+        err_cb_call(self, e, nil) if @err_cb
+      end
+
+      process_op_error(e)
     end
 
     def ping_interval_loop(stop)
@@ -2279,7 +2312,7 @@ module NATS
             cmds << @pending_queue.pop until @pending_queue.empty?
 
             # FIXME: Fails when empty on TLS connection?
-            @io.write(cmds.join) unless cmds.empty?
+            @io.write(cmds.join, @options[:flusher_timeout]) unless cmds.empty?
           rescue => e
             @last_err = e
             err_cb_call(self, e, nil) if @err_cb
@@ -2816,9 +2849,12 @@ module NATS
         raise Errno::ECONNRESET
       end
 
+      # Writes all of data, giving up once the socket took no more than part
+      # of it for deadline seconds, when given.
       def write(data, deadline = nil)
         length = data.bytesize
         total_written = 0
+        give_up_at = MonotonicTime.now + deadline if deadline
 
         loop do
           written = @socket.write_nonblock(data)
@@ -2827,16 +2863,16 @@ module NATS
           break total_written if total_written >= length
           data = data.byteslice(written..-1)
         rescue ::IO::WaitWritable
-          if ::IO.select(nil, [@socket], nil, deadline)
+          if ::IO.select(nil, [@socket], nil, time_left(give_up_at))
             retry
           else
-            raise NATS::IO::SocketTimeoutError
+            raise NATS::IO::SocketTimeoutError, "nats: timeout writing to the connection"
           end
         rescue ::IO::WaitReadable
-          if ::IO.select([@socket], nil, nil, deadline)
+          if ::IO.select([@socket], nil, nil, time_left(give_up_at))
             retry
           else
-            raise NATS::IO::SocketTimeoutError
+            raise NATS::IO::SocketTimeoutError, "nats: timeout writing to the connection"
           end
         end
       rescue EOFError
@@ -2871,6 +2907,10 @@ module NATS
       end
 
       private
+
+      def time_left(give_up_at)
+        [give_up_at - MonotonicTime.now, 0].max if give_up_at
+      end
 
       # The TCP socket, also under TLS.
       def raw_socket

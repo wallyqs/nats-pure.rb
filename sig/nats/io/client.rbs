@@ -82,6 +82,7 @@ module NATS
     @pongs: Array[MonitorMixin::ConditionVariable]
 
     @pending_size: Integer
+    @flush_lock: Thread::Mutex
 
     @last_err: untyped
 
@@ -317,6 +318,12 @@ module NATS
 
     def force_flush!: () -> void
 
+    def flush_pending!: () -> void
+
+    def write_pending: () -> void
+
+    def handle_flush_error: (untyped) -> void
+
     def ping_interval_loop: () -> void
 
     def process_connect_init: () -> void
@@ -420,6 +427,8 @@ module NATS
       def local_address: () -> String
 
       private
+
+      def time_left: (Float?) -> Float?
 
       def raw_socket: () -> ::Socket
 
