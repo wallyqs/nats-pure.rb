@@ -19,6 +19,7 @@ require_relative "jetstream/api"
 require_relative "jetstream/batch_get"
 require_relative "jetstream/batch_publisher"
 require_relative "jetstream/consume"
+require_relative "jetstream/consumer"
 require_relative "jetstream/errors"
 require_relative "jetstream/fast_publisher"
 require_relative "jetstream/header"
@@ -29,6 +30,7 @@ require_relative "jetstream/ordered_consumer"
 require_relative "jetstream/pub_ack_future"
 require_relative "jetstream/pull_subscription"
 require_relative "jetstream/push_subscription"
+require_relative "jetstream/stream"
 
 module NATS
   # JetStream returns a context with a similar API as the NATS::Client
@@ -510,6 +512,49 @@ module NATS
     #   stream does not exist.
     def ordered_consumer(stream, params = {})
       OrderedConsumer.new(self, stream, params)
+    end
+
+    # stream returns a handle to a stream, with its current info, like
+    # Stream of the nats.go jetstream package.
+    #
+    # @example Purge a stream and read the last message on a subject.
+    #
+    #   stream = js.stream("ORDERS")
+    #   stream.purge(subject: "orders.eu")
+    #   msg = stream.get_last_msg_for_subject("orders.us")
+    #
+    # @param name [String] Name of the stream.
+    # @param params [Hash] Options of {Manager#stream_info}.
+    # @return [NATS::JetStream::Stream]
+    # @raise [NATS::JetStream::Error::StreamNotFound] When the stream does not exist.
+    def stream(name, params = {})
+      Stream.new(self, name, stream_info(name, params))
+    end
+
+    # consumer returns a handle to a pull consumer, with its current info,
+    # like Consumer of the nats.go jetstream package.
+    #
+    # @param stream [String] Name of the stream.
+    # @param name [String] Name of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::Consumer]
+    # @raise [NATS::JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+    # @raise [NATS::JetStream::Error::NotPullConsumer] When it is a push consumer.
+    def consumer(stream, name, params = {})
+      Stream.new(self, stream, nil).consumer(name, params)
+    end
+
+    # push_consumer returns a handle to a push consumer, with its current
+    # info, like PushConsumer of the nats.go jetstream package.
+    #
+    # @param stream [String] Name of the stream.
+    # @param name [String] Name of the consumer.
+    # @param params [Hash] Options to customize API request.
+    # @return [NATS::JetStream::PushConsumer]
+    # @raise [NATS::JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+    # @raise [NATS::JetStream::Error::NotPushConsumer] When it is a pull consumer.
+    def push_consumer(stream, name, params = {})
+      Stream.new(self, stream, nil).push_consumer(name, params)
     end
 
     private

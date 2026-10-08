@@ -1,0 +1,65 @@
+module NATS
+  class JetStream
+    class Stream
+      type consumer_config = JetStream::API::ConsumerConfig | Hash[Symbol, untyped]
+
+      attr_reader name: String
+
+      def initialize: (NATS::JetStream, String, JetStream::API::StreamInfo?) -> void
+
+      def info: (?Hash[Symbol, untyped]) -> JetStream::API::StreamInfo
+
+      def cached_info: () -> JetStream::API::StreamInfo?
+
+      def purge: (?Hash[Symbol, untyped]) -> JetStream::API::StreamPurgeResponse
+
+      def delete_msg: (Integer, ?Hash[Symbol, untyped]) -> bool
+
+      def secure_delete_msg: (Integer, ?Hash[Symbol, untyped]) -> bool
+
+      def get_msg: (Integer, ?Hash[Symbol, untyped]) -> JetStream::API::RawStreamMsg
+
+      def get_last_msg_for_subject: (String, ?Hash[Symbol, untyped]) -> JetStream::API::RawStreamMsg
+
+      def create_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+      def update_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+      def create_or_update_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+      def consumer: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+      def create_push_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+      def update_push_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+      def create_or_update_push_consumer: (consumer_config, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+      def push_consumer: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+      def ordered_consumer: (?Hash[Symbol, untyped]) -> NATS::JetStream::OrderedConsumer
+
+      def delete_consumer: (String, ?Hash[Symbol, untyped]) -> bool
+
+      def pause_consumer: (String, Time | String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse
+
+      def resume_consumer: (String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse
+
+      def unpin_consumer: (String, String, ?Hash[Symbol, untyped]) -> bool
+
+      def reset_consumer: (String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerResetResponse
+
+      def consumers: (?Hash[Symbol, untyped]) -> Array[JetStream::API::ConsumerInfo]
+
+      alias list_consumers consumers
+
+      def consumer_names: (?Hash[Symbol, untyped]) -> Array[String]
+
+      private
+
+      def direct_get?: () -> bool
+
+      def push_config: (consumer_config) -> consumer_config
+    end
+  end
+end

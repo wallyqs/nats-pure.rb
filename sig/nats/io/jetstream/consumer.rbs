@@ -1,0 +1,43 @@
+module NATS
+  class JetStream
+    class Consumer
+      attr_reader stream: String
+
+      attr_reader name: String
+
+      def initialize: (NATS::JetStream, String, JetStream::API::ConsumerInfo) -> void
+
+      def info: (?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+
+      def cached_info: () -> JetStream::API::ConsumerInfo
+
+      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+
+      def fetch_bytes: (Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+
+      def fetch_no_wait: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+
+      def next: (?Hash[Symbol, untyped]) -> NATS::Msg
+
+      def consume: (?Hash[Symbol, untyped]) { (NATS::Msg) -> void } -> NATS::JetStream::ConsumeContext
+
+      def messages: (?Hash[Symbol, untyped]) -> NATS::JetStream::MessagesContext
+
+      private
+
+      def psub: () -> NATS::JetStream::PullSubscription
+    end
+
+    class PushConsumer
+      attr_reader stream: String
+
+      attr_reader name: String
+
+      def initialize: (NATS::JetStream, String, JetStream::API::ConsumerInfo) -> void
+
+      def info: (?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+
+      def cached_info: () -> JetStream::API::ConsumerInfo
+    end
+  end
+end
