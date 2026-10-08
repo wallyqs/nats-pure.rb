@@ -83,6 +83,10 @@
 - JetStream: `jsm.delete_msg(stream, seq)` and `jsm.secure_delete_msg(stream, seq)` delete a message from a stream, like `DeleteMsg` and `SecureDeleteMsg` of nats.go; the secure variant overwrites the message's data. A deletion that the server does not confirm raises `NATS::JetStream::Error::MsgDeleteUnsuccessful`.
 - JetStream: `jsm.purge_stream(name)` purges a stream, like `PurgeStream` of nats.go: all its messages, or only those on a `subject:` (wildcards allowed), those below a sequence (`seq:`), or all but the latest `keep:` ones. It returns a `StreamPurgeResponse` with the number of messages `purged`. `seq:` and `keep:` together raise `ArgumentError`.
 
+### Changed
+
+- Like nats.go, a server that refuses the client with the same auth error twice in a row (an authorization violation, or expired or revoked user or account credentials), with no successful connect in between, stops the reconnecting and closes the connection, also with `max_reconnect_attempts: -1`, which retried such a server for good; `last_error` is that auth error. A single auth error behaves as before, and `ignore_auth_error_abort: true` keeps reconnecting, like `IgnoreAuthErrorAbort`. An auth error of a connected server now marks that server rather than the next one in the pool.
+
 ### Fixed
 
 - `nc.draining?` stayed `true` once a drained connection had closed; like `IsDraining` of nats.go, it is now `false` then, as is `Subscription#draining?` of a subscription that was draining when the connection closed. Services stopped their endpoint and monitoring subscriptions with a drain that never ended, so that `draining?` stayed `true`; like nats.go micro, they now drain them as `Subscription#drain` does, which closes them once the requests that came were handled.
