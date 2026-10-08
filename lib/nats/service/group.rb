@@ -6,7 +6,7 @@ module NATS
       attr_reader :service, :name, :subject, :queue, :groups, :endpoints
 
       def initialize(name:, parent:, queue:, queue_group_disabled: false)
-        Validator.validate(name: name, queue: queue)
+        Validator.validate(group: name, queue: queue)
 
         @name = name
 

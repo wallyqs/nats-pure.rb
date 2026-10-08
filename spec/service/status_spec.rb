@@ -53,6 +53,7 @@ RSpec.describe NATS::Service::Status do
 
       it "returns info status with empty endpoints" do
         expect(subject.info).to eq({
+          type: "io.nats.micro.v1.info_response",
           **basic,
           description: "foo bar",
           endpoints: []
@@ -70,6 +71,7 @@ RSpec.describe NATS::Service::Status do
 
       it "returns info status with endpoints" do
         expect(subject.info).to eq({
+          type: "io.nats.micro.v1.info_response",
           **basic,
           description: "foo bar",
           endpoints: [
@@ -93,6 +95,7 @@ RSpec.describe NATS::Service::Status do
 
       it "returns stats status with empty endpoints" do
         expect(subject.stats).to eq({
+          type: "io.nats.micro.v1.stats_response",
           **basic,
           started: "2025-01-25T07:45:10Z",
           endpoints: []
@@ -133,6 +136,7 @@ RSpec.describe NATS::Service::Status do
       context "when on_stats callback is no registered" do
         it "returns info status with empty data fields" do
           expect(subject.stats).to eq({
+            type: "io.nats.micro.v1.stats_response",
             **basic,
             started: "2025-01-25T07:45:10Z",
             endpoints: [
@@ -175,6 +179,7 @@ RSpec.describe NATS::Service::Status do
 
         it "returns info status with data fields" do
           expect(subject.stats).to eq({
+            type: "io.nats.micro.v1.stats_response",
             **basic,
             started: "2025-01-25T07:45:10Z",
             endpoints: [

@@ -25,6 +25,13 @@ module NATS
     # The root of all control subjects, like APIPrefix of nats.go micro.
     API_PREFIX = "$SRV"
 
+    # The types of the responses to PING, INFO and STATS, like
+    # PingResponseType, InfoResponseType and StatsResponseType of nats.go
+    # micro.
+    PING_RESPONSE_TYPE = Monitoring::TYPES[:ping]
+    INFO_RESPONSE_TYPE = Monitoring::TYPES[:info]
+    STATS_RESPONSE_TYPE = Monitoring::TYPES[:stats]
+
     # The headers of an error response, like ErrorHeader and
     # ErrorCodeHeader of nats.go micro.
     ERROR_HEADER = "Nats-Service-Error"
@@ -129,14 +136,27 @@ module NATS
       synchronize { @stopped = true }
     end
 
+    # Resets the stats of the endpoints and the time the service started,
+    # like Reset of nats.go micro.
     def reset
       endpoints.each(&:reset)
+      status.reset
     end
 
+    # The response of the service to a PING: its type, name, id, version
+    # and metadata, like Ping of nats.go micro.
+    def ping
+      status.ping
+    end
+
+    # The info of the service, as it responds to an INFO, like Info of
+    # nats.go micro.
     def info
       status.info
     end
 
+    # The stats of the service, as it responds to a STATS, like Stats of
+    # nats.go micro.
     def stats
       status.stats
     end
@@ -151,8 +171,9 @@ module NATS
 
     private
 
+    # Like nats.go micro, a service must have a name and a SemVer version.
     def validate(options)
-      Validator.validate(options.slice(:name, :version, :queue))
+      Validator.validate(name: options[:name], version: options[:version], queue: options[:queue])
     end
 
     def setup_options(options)

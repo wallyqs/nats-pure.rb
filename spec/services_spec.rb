@@ -15,7 +15,7 @@ RSpec.describe NATS::Services do
   let(:client) { NATS.connect }
 
   describe "#add" do
-    let(:add) { subject.add(name: "foo", queue: "default") }
+    let(:add) { subject.add(name: "foo", version: "1.0.0", queue: "default") }
 
     it "creates services" do
       expect(add).to be_kind_of(NATS::Service)

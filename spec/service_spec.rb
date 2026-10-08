@@ -25,11 +25,14 @@ RSpec.describe NATS::Service do
     }
   end
 
+  # Like nats.go micro, a service needs a name and a version.
+  let(:base) { {name: "foo", version: "1.0.0"} }
+
   after { client.close }
 
   describe "#initialize" do
     context "when :name is valid" do
-      let(:options) { {name: "foo"} }
+      let(:options) { {**base, name: "foo"} }
 
       it "sets name" do
         expect(subject.name).to eq("foo")
@@ -37,7 +40,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :name is invalid" do
-      let(:options) { {name: "$foo.*"} }
+      let(:options) { {**base, name: "$foo.*"} }
 
       it "raises InvalidNameError" do
         expect { subject }.to raise_error(NATS::Service::InvalidNameError)
@@ -45,7 +48,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :name is blank" do
-      let(:options) { {name: nil} }
+      let(:options) { {**base, name: nil} }
 
       it "raises InvalidNameError" do
         expect { subject }.to raise_error(NATS::Service::InvalidNameError)
@@ -53,7 +56,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :version is valid" do
-      let(:options) { {version: "1.0.0-alpha-a.b-c+build.1-aef.1"} }
+      let(:options) { {**base, version: "1.0.0-alpha-a.b-c+build.1-aef.1"} }
 
       it "sets version" do
         expect(subject.version).to eq("1.0.0-alpha-a.b-c+build.1-aef.1")
@@ -61,7 +64,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :version is invalid" do
-      let(:options) { {version: "version-1.0-alpha"} }
+      let(:options) { {**base, version: "version-1.0-alpha"} }
 
       it "raises InvalidVersionError" do
         expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
@@ -69,7 +72,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :version is blank" do
-      let(:options) { {version: nil} }
+      let(:options) { {**base, version: nil} }
 
       it "raises InvalidVersionError" do
         expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
@@ -77,7 +80,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :description is valid" do
-      let(:options) { {description: "bar"} }
+      let(:options) { {**base, description: "bar"} }
 
       it "sets description" do
         expect(subject.description).to eq("bar")
@@ -85,7 +88,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :description is blank" do
-      let(:options) { {description: nil} }
+      let(:options) { {**base, description: nil} }
 
       it "sets description to nil" do
         expect(subject.description).to be nil
@@ -93,7 +96,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :metadata is present" do
-      let(:options) { {metadata: {foo: :bar}} }
+      let(:options) { {**base, metadata: {foo: :bar}} }
 
       it "sets metadata" do
         expect(subject.metadata).to eq({foo: :bar})
@@ -105,7 +108,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :metadata is blank" do
-      let(:options) { {metatada: nil} }
+      let(:options) { {**base, metatada: nil} }
 
       it "sets metadata to nil" do
         expect(subject.metadata).to be_nil
@@ -113,7 +116,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :queue is present" do
-      let(:options) { {queue: "qux"} }
+      let(:options) { {**base, queue: "qux"} }
 
       it "sets queue" do
         expect(subject.queue).to eq("qux")
@@ -121,7 +124,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :queue is blank" do
-      let(:options) { {queue: nil} }
+      let(:options) { {**base, queue: nil} }
 
       it "sets queue to default queue" do
         expect(subject.queue).to eq("q")
@@ -129,7 +132,7 @@ RSpec.describe NATS::Service do
     end
 
     context "when :queue is invalid" do
-      let(:options) { {queue: ">qux"} }
+      let(:options) { {**base, queue: ">qux"} }
 
       it "raises InvalidQueueError" do
         expect { subject }.to raise_error(NATS::Service::InvalidQueueError)
@@ -300,6 +303,7 @@ RSpec.describe NATS::Service do
   describe "#info" do
     it "returns info" do
       expect(subject.info).to eq({
+        type: "io.nats.micro.v1.info_response",
         name: "foo",
         id: subject.id,
         version: "1.0.0",
@@ -319,6 +323,7 @@ RSpec.describe NATS::Service do
 
     it "returns stats" do
       expect(subject.stats).to eq({
+        type: "io.nats.micro.v1.stats_response",
         name: "foo",
         id: subject.id,
         version: "1.0.0",

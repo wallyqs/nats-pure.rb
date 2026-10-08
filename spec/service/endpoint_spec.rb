@@ -13,7 +13,7 @@ RSpec.describe NATS::Service::Endpoint do
   let(:client) { NATS.connect }
   let(:subs) { client.instance_variable_get("@subs") }
 
-  let(:service) { client.services.add(name: "foo", queue: "queue") }
+  let(:service) { client.services.add(name: "foo", version: "1.0.0", queue: "queue") }
 
   subject do
     described_class.new(name: name, options: options, parent: parent, &block)

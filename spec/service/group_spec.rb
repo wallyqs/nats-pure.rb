@@ -7,7 +7,7 @@ RSpec.describe NATS::Service::Group do
   let(:queue) { "queue" }
 
   let(:client) { NATS.connect }
-  let(:service) { client.services.add(name: "foo", queue: "default") }
+  let(:service) { client.services.add(name: "foo", version: "1.0.0", queue: "default") }
   let(:parent) { service }
 
   before(:all) do
