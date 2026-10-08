@@ -48,6 +48,9 @@ module NATS
     class InvalidMsg < TypeError
     end
 
+    class MixingWebsocketSchemes < ArgumentError
+    end
+
     class ClientCertOrRootCAsRequired < ArgumentError
     end
 

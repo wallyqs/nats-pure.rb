@@ -448,6 +448,7 @@ module NATS
           hostname: nats_uri.hostname
         }
       end
+      check_websocket_schemes!(@server_pool.map { |srv| srv[:uri] })
 
       if @options[:old_style_request]
         # Replace for this instance the implementation
@@ -922,9 +923,11 @@ module NATS
     # announces still join the pool unless ignore_discovered_urls is set.
     #
     # @param urls [Array<String, URI>] URLs as for connect, like "nats://127.0.0.1:4222" or "127.0.0.1:4222".
-    # @raise [ArgumentError] For an invalid URL, or when it mixes websocket
-    #   and other URLs, like ErrMixingWebsocketSchemes of nats.go. The pool
-    #   is left as it was.
+    # @raise [ArgumentError] For an invalid URL. The pool is left as it was.
+    # @raise [NATS::IO::MixingWebsocketSchemes] When it mixes websocket and
+    #   other URLs, like ErrMixingWebsocketSchemes of nats.go, or has others
+    #   than those of the connection. An ArgumentError too. The pool is left
+    #   as it was.
     # @raise [NATS::IO::ConnectionClosedError] When the connection is closed.
     def set_server_pool(urls)
       synchronize do
@@ -932,9 +935,7 @@ module NATS
 
         uris = Array(urls).flat_map { |url| parse_server_urls(url) }
         current = @uri || server_pool.first&.fetch(:uri) || uris.first
-        if uris.any? { |uri| %w[ws wss].include?(uri.scheme) != %w[ws wss].include?(current.scheme) }
-          raise ArgumentError, "nats: mixing of websocket and non websocket URLs is not allowed"
-        end
+        check_websocket_schemes!(uris, current)
 
         pool = uris.map do |uri|
           # Keep the state of the servers that remain.
@@ -1725,6 +1726,17 @@ module NATS
       @uri.password = @options[:pass] if @options[:pass]
 
       srv
+    end
+
+    # Like nats.go, the servers of a connection are all websocket ones or
+    # none are, as the first or the current one is.
+    def check_websocket_schemes!(uris, current = uris.first)
+      return unless current
+
+      websocket = %w[ws wss].include?(current.scheme)
+      return if uris.all? { |uri| %w[ws wss].include?(uri.scheme) == websocket }
+
+      raise NATS::IO::MixingWebsocketSchemes, "nats: mixing of websocket and non websocket URLs is not allowed"
     end
 
     def server_using_secure_connection?

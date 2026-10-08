@@ -286,6 +286,8 @@ module NATS
 
     def select_next_error: () -> untyped
 
+    def check_websocket_schemes!: (Array[URI::Generic], ?URI::Generic?) -> void
+
     def server_using_secure_connection?: () -> bool
 
     def client_using_secure_connection?: () -> bool

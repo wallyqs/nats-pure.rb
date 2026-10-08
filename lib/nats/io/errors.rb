@@ -87,6 +87,10 @@ module NATS
     # ErrInvalidMsg of nats.go. A TypeError, as it was.
     class InvalidMsg < TypeError; end
 
+    # When the servers of a connection mix websocket and other URLs, like
+    # ErrMixingWebsocketSchemes of nats.go.
+    class MixingWebsocketSchemes < ArgumentError; end
+
     # When the tls option names cert_cb or ca_cb but sets neither, like
     # ErrClientCertOrRootCAsRequired of nats.go.
     class ClientCertOrRootCAsRequired < ArgumentError; end
