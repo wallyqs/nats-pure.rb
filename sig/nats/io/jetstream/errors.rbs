@@ -167,6 +167,60 @@ module NATS
       class ServerShutdown < NATS::JetStream::Error::APIError
       end
 
+      class BatchClosed < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
+      class EmptyBatch < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
+      class InvalidBatchAck < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
+      class BatchPublishNotEnabled < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10174
+      end
+
+      class BatchPublishMissingSeq < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10175
+      end
+
+      class BatchPublishIncomplete < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10176
+      end
+
+      class BatchPublishUnsupportedHeader < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10177
+      end
+
+      class BatchPublishInvalidID < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10179
+      end
+
+      class MirrorWithAtomicPublish < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10198
+      end
+
+      class BatchPublishExceedsLimit < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10199
+      end
+
+      class BatchPublishInvalidCommit < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10200
+      end
+
+      class BatchPublishDuplicateMsgID < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10201
+      end
+
+      class AtomicPublishTooManyInflight < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10210
+      end
+
+      BATCH_PUBLISH_ERRORS: Hash[Integer, singleton(NATS::JetStream::Error::BadRequest)]
+
       class PinIdMismatch < NATS::JetStream::Error::APIError
       end
 

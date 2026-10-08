@@ -263,6 +263,83 @@ module NATS
       # This condition is represented with a message that has 409 status code header.
       class ServerShutdown < APIError; end
 
+      # When a batch publisher is used after it was committed or discarded,
+      # like ErrBatchClosed of orbit.go jetstreamext.
+      class BatchClosed < Error
+        def initialize(msg = "nats: batch publisher closed")
+          super
+        end
+      end
+
+      # When a batch with no messages is closed or published, like
+      # ErrEmptyBatch of orbit.go jetstreamext.
+      class EmptyBatch < Error
+        def initialize(msg = "nats: no messages in batch")
+          super
+        end
+      end
+
+      # When the ack of a batch is not one of the batch: of another batch,
+      # with another number of messages or none of a stream, like
+      # ErrInvalidBatchAck of orbit.go jetstreamext.
+      class InvalidBatchAck < Error
+        def initialize(msg = "nats: invalid jetstream batch publish response")
+          super
+        end
+      end
+
+      # The errors with which the server refuses an atomic batch publish
+      # (nats-server v2.12.0), named as in orbit.go jetstreamext, with the
+      # error codes of nats-server. Each class has its error code as
+      # ERR_CODE.
+
+      # When the stream does not have allow_atomic (orbit.go
+      # ErrBatchPublishNotEnabled).
+      class BatchPublishNotEnabled < BadRequest; ERR_CODE = 10174; end
+
+      # When a message of a batch has no batch sequence (orbit.go
+      # ErrBatchPublishMissingSeq).
+      class BatchPublishMissingSeq < BadRequest; ERR_CODE = 10175; end
+
+      # When a batch is missing messages, or was abandoned as it timed out
+      # (orbit.go ErrBatchPublishIncomplete).
+      class BatchPublishIncomplete < BadRequest; ERR_CODE = 10176; end
+
+      # When a message of a batch has a header that batches do not support,
+      # Nats-Expected-Last-Msg-Id (orbit.go ErrBatchPublishUnsupportedHeader).
+      class BatchPublishUnsupportedHeader < BadRequest; ERR_CODE = 10177; end
+
+      # When the batch ID is longer than 64 characters (orbit.go
+      # ErrBatchPublishInvalidID).
+      class BatchPublishInvalidID < BadRequest; ERR_CODE = 10179; end
+
+      # When a stream that mirrors another is given allow_atomic.
+      class MirrorWithAtomicPublish < BadRequest; ERR_CODE = 10198; end
+
+      # When a batch has more messages than the server allows, 1000 by
+      # default (orbit.go ErrBatchPublishExceedsLimit).
+      class BatchPublishExceedsLimit < BadRequest; ERR_CODE = 10199; end
+
+      # When the commit header of a batch has a value the server does not
+      # know (orbit.go ErrBatchPublishInvalidCommit).
+      class BatchPublishInvalidCommit < BadRequest; ERR_CODE = 10200; end
+
+      # When two messages of a batch have the same Nats-Msg-Id (orbit.go
+      # ErrBatchPublishDuplicateMsgID).
+      class BatchPublishDuplicateMsgID < BadRequest; ERR_CODE = 10201; end
+
+      # When the server has too many atomic batches in flight; its status
+      # code is 429 (orbit.go ErrAtomicPublishTooManyInflight).
+      class AtomicPublishTooManyInflight < BadRequest; ERR_CODE = 10210; end
+
+      # The batch publish errors by error code.
+      BATCH_PUBLISH_ERRORS = [
+        BatchPublishNotEnabled, BatchPublishMissingSeq, BatchPublishIncomplete,
+        BatchPublishUnsupportedHeader, BatchPublishInvalidID, MirrorWithAtomicPublish,
+        BatchPublishExceedsLimit, BatchPublishInvalidCommit, BatchPublishDuplicateMsgID,
+        AtomicPublishTooManyInflight
+      ].to_h { |klass| [klass::ERR_CODE, klass] }.freeze
+
       # When a fetch from a consumer with the pinned_client priority policy
       # finds the subscription no longer pinned, as its pin expired or it
       # was unpinned. The subscription forgets its pin, so that its next

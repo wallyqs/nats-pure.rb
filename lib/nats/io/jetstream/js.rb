@@ -162,6 +162,11 @@ module NATS
         def from_error(err)
           return unless err
 
+          # The batch publish errors come with 400, or 429 when too many
+          # batches are in flight.
+          batch = ::NATS::JetStream::Error::BATCH_PUBLISH_ERRORS[err[:err_code]]
+          return batch.new(err) if batch && [400, 429].include?(err[:code])
+
           base = STATUS_ERRORS[err[:code]]
           return ::NATS::JetStream::API::Error.new(err) unless base
 
