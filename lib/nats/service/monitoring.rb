@@ -31,11 +31,13 @@ module NATS
       def stop
         return if @monitors.nil?
 
+        # Drains each subscription, like nats.go micro, which closes once
+        # the requests that came were answered.
         @monitors.each do |monitor|
-          service.client.send(:drain_sub, monitor)
+          monitor.drain
+        rescue
+          # nothing we can do here
         end
-      rescue
-        # nothing we can do here
       ensure
         @monitors = nil
       end

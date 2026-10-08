@@ -230,9 +230,9 @@ module NATS
     end
 
     # Whether the subscription is draining, like IsDraining of nats.go;
-    # false once the drain is done.
+    # false once the drain is done, or the connection closed.
     def draining?
-      synchronize { !!@drained && !@closed }
+      synchronize { !!@drained && !@closed } && !@nc.closed?
     end
 
     # The number of messages dropped as the subscription had as many
