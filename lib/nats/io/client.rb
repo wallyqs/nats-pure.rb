@@ -435,6 +435,8 @@ module NATS
         synchronize do
           @last_err = e
           srv[:auth_required] ||= true if @server_info[:auth_required]
+          # The server will not support no_echo on a retry either.
+          srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
           server_pool << srv if can_reuse_server?(srv)
         end
 
@@ -1257,6 +1259,12 @@ module NATS
     end
 
     def connect_command
+      # Like nats.go, refuse to connect when the server cannot honor no_echo,
+      # which servers before protocol 1 ignore.
+      if @options[:no_echo] && @server_info[:proto].to_i < 1
+        raise NATS::IO::NoEchoNotSupported.new("nats: no echo option not supported by this server")
+      end
+
       cs = {
         verbose: @options[:verbose],
         pedantic: @options[:pedantic],
@@ -1265,6 +1273,7 @@ module NATS
         protocol: NATS::IO::PROTOCOL
       }
       cs[:name] = @options[:name] if @options[:name]
+      cs[:echo] = false if @options[:no_echo]
 
       if auth_connection?
         if @uri.password
@@ -1555,6 +1564,7 @@ module NATS
         # In case there was an error from the server check
         # to see whether need to take it out from rotation
         srv[:auth_required] ||= true if @server_info[:auth_required]
+        srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
         server_pool << srv if can_reuse_server?(srv)
 
         @last_err = e

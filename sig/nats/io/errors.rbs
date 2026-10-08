@@ -15,6 +15,9 @@ module NATS
     class AuthError < NATS::IO::ConnectError
     end
 
+    class NoEchoNotSupported < NATS::IO::ConnectError
+    end
+
     class NoServersError < NATS::IO::ConnectError
     end
 
