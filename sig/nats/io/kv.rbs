@@ -28,6 +28,8 @@ module NATS
 
     EXPECTED_LAST_SUBJECT_SEQUENCE: 'Nats-Expected-Last-Subject-Sequence'
 
+    WRONG_LAST_SEQUENCE_ERR_CODES: Array[Integer]
+
     def update: (String, untyped, ?Hash[Symbol, untyped]) -> Integer
 
     private def update_revision: (String, untyped, Integer, (Integer | :never)?) -> Integer

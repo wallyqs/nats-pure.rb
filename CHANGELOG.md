@@ -21,6 +21,7 @@
 
 ### Fixed
 
+- KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
 - KV: `create_key_value` dropped the `placement` of the bucket, so its stream was created without it. It now passes it on to the stream config, like `CreateKeyValue` of nats.go.
 
 ## v2.7.0
