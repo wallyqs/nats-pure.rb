@@ -62,6 +62,7 @@ module NATS
         req_subject = "#{@prefix}.STREAM.CREATE.#{stream}"
 
         result = api_request(req_subject, stream_config_json(config), params)
+        check_stream_applied(config, result)
         JetStream::API::StreamCreateResponse.new(result)
       end
 
@@ -131,6 +132,7 @@ module NATS
         raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
         result = api_request(req_subject, stream_config_json(config), params)
+        check_stream_applied(config, result)
         JetStream::API::StreamCreateResponse.new(result)
       end
 
@@ -557,7 +559,33 @@ module NATS
         req[:action] = action if action
 
         result = api_request(req_subject, req.to_json, params)
+        # Like nats.go, check that the server applied the filter subjects.
+        if !cfg[:filter_subjects].to_a.empty? && result.dig(:config, :filter_subjects).to_a.empty?
+          raise JetStream::Error::ConsumerMultipleFilterSubjectsNotSupported.new("nats: multiple consumer filter subjects not supported by nats-server")
+        end
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # check_stream_applied raises the errors of nats.go when the server
+      # created or updated a stream without the subject transform or the
+      # sources of its config, as older servers that do not know them do.
+      def check_stream_applied(config, result)
+        applied = result[:config] || {}
+        if config[:subject_transform] && applied[:subject_transform].nil?
+          raise JetStream::Error::StreamSubjectTransformNotSupported.new("nats: stream subject transformation not supported by nats-server")
+        end
+        sources = config[:sources].to_a
+        return if sources.empty?
+
+        applied_sources = applied[:sources].to_a
+        if sources.size != applied_sources.size
+          raise JetStream::Error::StreamSourceNotSupported.new("nats: stream sourcing is not supported by nats-server")
+        end
+        # The server may list the sources in another order.
+        transforms = ->(source) { (source[:subject_transforms] || source["subject_transforms"]).to_a.size }
+        unless sources.map(&transforms).sort == applied_sources.map(&transforms).sort
+          raise JetStream::Error::StreamSourceSubjectTransformNotSupported.new("nats: stream subject transformation not supported by nats-server")
+        end
       end
 
       # request_msg_delete sends a message delete request. A deletion the

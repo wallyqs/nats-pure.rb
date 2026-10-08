@@ -49,6 +49,18 @@ module NATS
       class NoHeartbeat < NATS::JetStream::Error
       end
 
+      class StreamSubjectTransformNotSupported < NATS::JetStream::Error
+      end
+
+      class StreamSourceSubjectTransformNotSupported < NATS::JetStream::Error::StreamSubjectTransformNotSupported
+      end
+
+      class StreamSourceNotSupported < NATS::JetStream::Error
+      end
+
+      class ConsumerMultipleFilterSubjectsNotSupported < NATS::JetStream::Error
+      end
+
       class MsgIteratorClosed < NATS::JetStream::Error
       end
 
