@@ -114,6 +114,28 @@ module NATS
         result[:success]
       end
 
+      # purge_stream removes messages from a stream: all of them by default,
+      # or only those of a subject, those below a sequence, or all but the
+      # latest few. The options combine, as in nats.go, except :seq and :keep.
+      # @param stream [String] Name of the stream.
+      # @param params [Hash] Options to customize API request.
+      # @option params [String] :subject Purge only the messages on this subject, which may have wildcards.
+      # @option params [Integer] :seq Purge the messages below this sequence.
+      # @option params [Integer] :keep Keep this many of the latest messages.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::StreamPurgeResponse]
+      def purge_stream(stream, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        if params[:seq] && params[:keep]
+          raise ArgumentError.new("nats: both 'keep' and 'sequence' cannot be provided in purge request")
+        end
+
+        req = {filter: params[:subject], seq: params[:seq], keep: params[:keep]}.compact
+        req_subject = "#{@prefix}.STREAM.PURGE.#{stream}"
+        result = api_request(req_subject, req.empty? ? "" : req.to_json, timeout: params[:timeout])
+        JetStream::API::StreamPurgeResponse.new(result)
+      end
+
       # add_consumer creates a consumer with a given config, or updates the
       # consumer if one with the same name already exists.
       # @param stream [String] Name of the stream.

@@ -36,6 +36,9 @@ module NATS
       class StreamCreateResponse < Struct[String | NATS::JetStream::API::StreamConfig | NATS::JetStream::API::StreamState | bool]
       end
 
+      class StreamPurgeResponse < Struct[bool | Integer]
+      end
+
       class RawStreamMsg < Struct[String | Integer | Hash[Symbol, untyped]]
         def sequence: () -> Integer
       end

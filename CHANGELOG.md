@@ -2,6 +2,10 @@
 
 ## main
 
+### Added
+
+- JetStream: `jsm.purge_stream(name)` purges a stream, like `PurgeStream` of nats.go: all its messages, or only those on a `subject:` (wildcards allowed), those below a sequence (`seq:`), or all but the latest `keep:` ones. It returns a `StreamPurgeResponse` with the number of messages `purged`. `seq:` and `keep:` together raise `ArgumentError`.
+
 ## v2.7.0
 
 This release adds the JetStream features of nats-server 2.10 to 2.14 that the
