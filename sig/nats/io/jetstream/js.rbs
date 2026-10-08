@@ -16,7 +16,7 @@ module NATS
 
       def self.seconds: (Integer?) -> (Integer | Float)?
 
-      def self.parse_time: (String?) -> Time?
+      def self.parse_time: (String | Time | nil) -> Time?
 
       def self.is_status_msg: (NATS::Msg) -> bool
 

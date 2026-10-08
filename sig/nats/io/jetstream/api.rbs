@@ -26,6 +26,8 @@ module NATS
 
       class ConsumerConfig < Struct[String | Integer | Float | Time | Array[String]]
         def to_json: (*Hash[untyped, untyped]) -> String
+
+        def start_time: () -> Time?
       end
 
       class ConsumerPauseResponse < Struct[bool | Time | Integer | Float]
@@ -62,6 +64,14 @@ module NATS
 
       class StreamConfig < Struct[String | Hash[Symbol, untyped] | NATS::JetStream::API::StreamState | bool | Integer]
         def to_json: (*Hash[untyped, untyped]) -> String
+
+        def self.decode: (Hash[Symbol, untyped]) -> NATS::JetStream::API::StreamConfig
+      end
+
+      class StreamSource < Hash[Symbol, untyped]
+        def self.decode: (untyped) -> untyped
+
+        def start_time: () -> Time?
       end
 
       class StreamInfo < Struct[String | Hash[Symbol, untyped] | Array[Hash[Symbol, untyped]] | Time]
