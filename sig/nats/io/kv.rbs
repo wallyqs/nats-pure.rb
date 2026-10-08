@@ -19,8 +19,14 @@ module NATS
     MARKER_REASON: 'Nats-Marker-Reason'
 
     VALID_BUCKET_RE: Regexp
+    VALID_KEY_RE: Regexp
+    VALID_SEARCH_KEY_RE: Regexp
 
     def self.validate_bucket_name: (String?) -> void
+
+    def self.is_valid_key: (untyped) -> bool
+
+    def self.is_valid_search_key: (untyped) -> bool
 
     def self.operation_of: (Hash[String, String]?) -> String?
 

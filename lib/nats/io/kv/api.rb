@@ -30,6 +30,7 @@ module NATS
         :placement,
         :republish,
         :direct,
+        # Keys are validated, like in nats.go, unless this is false.
         :validate_keys,
         # Compress the bucket's stream with S2 (requires nats-server v2.10.0).
         :compression,

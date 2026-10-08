@@ -19,6 +19,10 @@ module NATS
     module Manager
       # key_value binds to an existing bucket, like KeyValue of nats.go.
       # @param bucket [String] Name of the bucket.
+      # @param params [Hash] Options of the handle.
+      # @option params [Boolean] :validate_keys Check keys before using them, like
+      #   nats.go, unless false: letters, digits and "-/_=.", with wildcards in
+      #   the patterns of watches.
       # @return [KeyValue]
       # @raise [KeyValue::InvalidBucketNameError] When the name is not that of a bucket.
       # @raise [KeyValue::BucketNotFoundError] When the bucket does not exist.

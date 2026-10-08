@@ -99,6 +99,7 @@
 
 ### Changed
 
+- KV: keys are validated always, like `keyValid` of nats.go, instead of only with `validate_keys: true`: `get`, `put`, `create`, `update`, `delete` and `purge` raise `NATS::KeyValue::InvalidKeyError` (`ErrInvalidKey`) for a key that is empty, has other characters than letters, digits and `-/_=.`, such as wildcards, or a `.` at either end or two in a row, and `watch`, `list_keys_filtered`, `keys` and `history` for a pattern that is not valid with the `*` and `>` wildcards (`searchKeyValid`). Keys that a trailing line break let through are refused too. `validate_keys: false` on `key_value` or the bucket config turns the checks off.
 - Like nats.go, a server that refuses the client with the same auth error twice in a row (an authorization violation, or expired or revoked user or account credentials), with no successful connect in between, stops the reconnecting and closes the connection, also with `max_reconnect_attempts: -1`, which retried such a server for good; `last_error` is that auth error. A single auth error behaves as before, and `ignore_auth_error_abort: true` keeps reconnecting, like `IgnoreAuthErrorAbort`. An auth error of a connected server now marks that server rather than the next one in the pool.
 
 ### Fixed
