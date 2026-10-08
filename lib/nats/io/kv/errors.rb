@@ -79,5 +79,20 @@ module NATS
         "nats: invalid key"
       end
     end
+
+    # When delete is given a TTL, which only purge takes.
+    class TTLOnDeleteNotSupportedError < Error
+      def to_s
+        "nats: TTL is not supported on delete"
+      end
+    end
+
+    # When a bucket is created with a limit_marker_ttl on a server that does
+    # not support it, before nats-server v2.11.0.
+    class LimitMarkerTTLNotSupportedError < Error
+      def to_s
+        "nats: limit marker TTLs not supported by server"
+      end
+    end
   end
 end

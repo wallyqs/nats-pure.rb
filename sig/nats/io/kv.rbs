@@ -6,6 +6,9 @@ module NATS
     MSG_ROLLUP_SUBJECT: 'sub'
     MSG_ROLLUP_ALL: 'all'
     ROLLUP: 'Nats-Rollup'
+    MARKER_REASON: 'Nats-Marker-Reason'
+
+    def self.operation_of: (Hash[String, String]?) -> String?
 
     @name: String
     @stream: String
@@ -21,15 +24,17 @@ module NATS
 
     def put: (String, untyped) -> Integer
 
-    def create: (String, untyped) -> Integer
+    def create: (String, untyped, ?Hash[Symbol, untyped]) -> Integer
 
     EXPECTED_LAST_SUBJECT_SEQUENCE: 'Nats-Expected-Last-Subject-Sequence'
 
     def update: (String, untyped, ?Hash[Symbol, untyped]) -> Integer
 
+    private def update_revision: (String, untyped, Integer, (Integer | :never)?) -> Integer
+
     def delete: (String, ?Hash[Symbol, untyped]) -> Integer
 
-    def purge: (String) -> NATS::JetStream::PubAck
+    def purge: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PubAck
 
     def status: () -> NATS::KeyValue::BucketStatus
 

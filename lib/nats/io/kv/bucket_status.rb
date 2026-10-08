@@ -42,6 +42,12 @@ module NATS
         !compression.nil? && compression != "none"
       end
 
+      # Seconds that the bucket keeps the markers left when a TTL removes a
+      # key, or 0 when it leaves none (requires nats-server v2.11.0).
+      def limit_marker_ttl
+        (@stream_info.config.subject_delete_marker_ttl || 0) / ::NATS::NANOSECONDS
+      end
+
       # The bucket's metadata, including the metadata that the server sets
       # (requires nats-server v2.10.0).
       def metadata

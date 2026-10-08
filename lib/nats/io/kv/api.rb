@@ -35,6 +35,9 @@ module NATS
         :compression,
         # Freeform metadata of the bucket (requires nats-server v2.10.0).
         :metadata,
+        # Seconds to keep the markers that the server leaves when a TTL
+        # removes a key, which per-key TTLs need (requires nats-server v2.11.0).
+        :limit_marker_ttl,
         keyword_init: true
       ) do
         def initialize(opts = {})

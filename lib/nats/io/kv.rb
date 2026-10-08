@@ -29,6 +29,9 @@ module NATS
     MSG_ROLLUP_SUBJECT = "sub"
     MSG_ROLLUP_ALL = "all"
     ROLLUP = "Nats-Rollup"
+    # Set by the server on the markers it leaves when a key is removed by a
+    # TTL or a purge (requires nats-server v2.11.0).
+    MARKER_REASON = "Nats-Marker-Reason"
 
     VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+$/
     VALID_KEY_RE = /\A[-\/_=.a-zA-Z0-9]+$/
@@ -43,6 +46,22 @@ module NATS
           false
         else
           true
+        end
+      end
+
+      # operation_of returns the operation of an entry from the headers of
+      # its message: KV_DEL or KV_PURGE for the markers of deletes and purges,
+      # including those that the server leaves when a TTL removes a key,
+      # the KV-Operation header of other messages, or nil.
+      def operation_of(header)
+        return if header.nil?
+
+        op = header[KV_OP]
+        return op if op
+
+        case header[MARKER_REASON]
+        when "MaxAge", "Purge" then KV_PURGE
+        when "Remove" then KV_DEL
         end
       end
     end
@@ -93,11 +112,9 @@ module NATS
         )
       end
 
-      if !msg.headers.nil?
-        op = msg.headers[KV_OP]
-        if (op == KV_DEL) || (op == KV_PURGE)
-          raise KeyDeletedError.new(entry: entry, op: op)
-        end
+      op = KeyValue.operation_of(msg.headers)
+      if (op == KV_DEL) || (op == KV_PURGE)
+        raise KeyDeletedError.new(entry: entry, op: op)
       end
 
       entry
@@ -116,12 +133,16 @@ module NATS
     end
 
     # create will add the key/value pair iff it does not exist.
-    def create(key, value)
+    # @param params [Hash] Options of the key.
+    # @option params [Integer, Symbol] :ttl Seconds after which the server
+    #   removes the key, or :never, like KeyTTL of nats.go. The bucket needs
+    #   limit_marker_ttl (requires nats-server v2.11.0).
+    def create(key, value, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
       pa = nil
       begin
-        pa = update(key, value, last: 0)
+        pa = update_revision(key, value, 0, params[:ttl])
       rescue KeyWrongLastSequenceError => err
         # In case of attempting to recreate an already deleted key,
         # the client would get a KeyWrongLastSequenceError.  When this happens,
@@ -139,7 +160,7 @@ module NATS
           # to recreate using the last revision.
           raise err
         rescue KeyDeletedError => err
-          pa = update(key, value, last: err.entry.revision)
+          pa = update_revision(key, value, err.entry.revision, params[:ttl])
         end
       end
 
@@ -152,12 +173,18 @@ module NATS
     def update(key, value, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
-      hdrs = {}
       last = (params[:last] ||= 0)
+      update_revision(key, value, last, nil)
+    end
+
+    # update_revision publishes the value iff the latest revision of the
+    # key is last, with a TTL if given.
+    def update_revision(key, value, last, ttl)
+      hdrs = {}
       hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
       ack = nil
       begin
-        ack = @js.publish("#{@pre}#{key}", value, header: hdrs)
+        ack = @js.publish("#{@pre}#{key}", value, header: hdrs, ttl: ttl)
       rescue NATS::JetStream::Error::APIError => err
         if err.err_code == 10071
           raise KeyWrongLastSequenceError.new(err.description)
@@ -168,10 +195,14 @@ module NATS
 
       ack.seq
     end
+    private :update_revision
 
     # delete will place a delete marker and remove all previous revisions.
+    # @raise [TTLOnDeleteNotSupportedError] When given a :ttl, which only
+    #   purge takes.
     def delete(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+      raise TTLOnDeleteNotSupportedError if params[:ttl]
 
       hdrs = {}
       hdrs[KV_OP] = KV_DEL
@@ -185,13 +216,17 @@ module NATS
     end
 
     # purge will remove the key and all revisions.
-    def purge(key)
+    # @param params [Hash] Options of the purge.
+    # @option params [Integer, Symbol] :ttl Seconds after which the server
+    #   removes the purge marker, or :never, like PurgeTTL of nats.go. The
+    #   bucket needs limit_marker_ttl (requires nats-server v2.11.0).
+    def purge(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
       hdrs = {}
       hdrs[KV_OP] = KV_PURGE
       hdrs[ROLLUP] = MSG_ROLLUP_SUBJECT
-      @js.publish("#{@pre}#{key}", header: hdrs)
+      @js.publish("#{@pre}#{key}", header: hdrs, ttl: params[:ttl])
     end
 
     # status retrieves the status and configuration of a bucket.
@@ -339,19 +374,14 @@ module NATS
         end
 
         # Keys() handling
-        op = nil
-        if msg.header && msg.header[KV_OP]
-          op = msg.header[KV_OP]
-          if params[:ignore_deletes]
-            if (op == KV_PURGE) || (op == KV_DEL)
-              if (meta.num_pending == 0) && !watcher._init_done
-                # Push this to unblock enumerators.
-                watcher._updates.push(nil)
-                watcher._init_done = true
-              end
-              next
-            end
+        op = KeyValue.operation_of(msg.header)
+        if params[:ignore_deletes] && ((op == KV_PURGE) || (op == KV_DEL))
+          if (meta.num_pending == 0) && !watcher._init_done
+            # Push this to unblock enumerators.
+            watcher._updates.push(nil)
+            watcher._init_done = true
           end
+          next
         end
 
         # Convert the msg into an Entry.

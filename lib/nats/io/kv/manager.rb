@@ -133,6 +133,13 @@ module NATS
           raise ArgumentError.new("nats: compression must be true or false")
         end
 
+        limit_marker_ttl = config.limit_marker_ttl
+        limit_marker_ttl = nil if limit_marker_ttl == 0
+        if limit_marker_ttl
+          # Like nats.go, check that the server knows subject delete markers.
+          raise NATS::KeyValue::LimitMarkerTTLNotSupportedError if account_info.dig(:api, :level).to_i < 1
+        end
+
         JetStream::API::StreamConfig.new(
           name: "KV_#{config.bucket}",
           description: config.description,
@@ -153,7 +160,9 @@ module NATS
           placement: config.placement,
           republish: config.republish,
           compression: config.compression ? "s2" : nil,
-          metadata: config.metadata
+          metadata: config.metadata,
+          allow_msg_ttl: limit_marker_ttl ? true : nil,
+          subject_delete_marker_ttl: limit_marker_ttl && limit_marker_ttl * ::NATS::NANOSECONDS
         )
       end
 
