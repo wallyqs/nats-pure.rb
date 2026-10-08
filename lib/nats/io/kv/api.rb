@@ -26,6 +26,7 @@ module NATS
         :max_bytes,
         :storage,
         :replicas,
+        # Placement of the bucket's stream in a cluster, as `{cluster:, tags:}`.
         :placement,
         :republish,
         :direct,

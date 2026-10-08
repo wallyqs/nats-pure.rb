@@ -80,6 +80,7 @@ module NATS
           max_msgs_per_subject: config.history,
           num_replicas: config.replicas,
           storage: config.storage,
+          placement: config.placement,
           republish: config.republish,
           compression: config.compression ? "s2" : nil,
           metadata: config.metadata

@@ -15,6 +15,10 @@
 - JetStream: `jsm.delete_msg(stream, seq)` and `jsm.secure_delete_msg(stream, seq)` delete a message from a stream, like `DeleteMsg` and `SecureDeleteMsg` of nats.go; the secure variant overwrites the message's data. A deletion that the server does not confirm raises `NATS::JetStream::Error::MsgDeleteUnsuccessful`.
 - JetStream: `jsm.purge_stream(name)` purges a stream, like `PurgeStream` of nats.go: all its messages, or only those on a `subject:` (wildcards allowed), those below a sequence (`seq:`), or all but the latest `keep:` ones. It returns a `StreamPurgeResponse` with the number of messages `purged`. `seq:` and `keep:` together raise `ArgumentError`.
 
+### Fixed
+
+- KV: `create_key_value` dropped the `placement` of the bucket, so its stream was created without it. It now passes it on to the stream config, like `CreateKeyValue` of nats.go.
+
 ## v2.7.0
 
 This release adds the JetStream features of nats-server 2.10 to 2.14 that the
