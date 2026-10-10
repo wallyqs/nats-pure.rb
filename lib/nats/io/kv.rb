@@ -415,7 +415,7 @@ module NATS
       hb_interval = params[:idle_heartbeat] * 2
       watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do |task|
         task.shutdown if nc.closed?
-        next unless nc.connected?
+        next unless nc.connected? && !nc.draining?
 
         # Wait for all idle heartbeats to be received, one of them would have
         # toggled the state of the consumer back to being active.
