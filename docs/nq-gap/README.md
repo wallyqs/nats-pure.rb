@@ -56,6 +56,29 @@ Ruby client binds and tests, but that nats-pure.rb lacks or only partly
 supports. The other gaps are oracle features that NQ also has only as
 `planned`.
 
+## Gaps closed after this audit
+
+The commits that follow the audit on this branch close these gaps, one
+commit per feature or fix. The rest of this report describes nats-pure.rb
+as it was audited, at `1b4cf34`.
+
+| Area | Closed by |
+| --- | --- |
+| Core NATS | `no_echo`; `connect_timeout` bounds the TCP dial and TLS handshake; reconnect jitter and `custom_reconnect_delay`; `reconnect_buf_size`; TLS `cert_file`/`key_file`/`ca_file` and `tls_handshake_first`; `token_handler`, `user_info_handler` and in-memory credentials; `on_connect`, `on_discovered_servers` and `on_lame_duck_mode`; specific server and client error classes; `rtt`; `set_server_pool`; connection and server-INFO introspection; `barrier`; `Subscription#drain`, `draining?`, `dropped` and `max_pending` |
+| JetStream | `purge_stream`; `delete_msg` and `secure_delete_msg`; stream and consumer listing; typed API and client errors; publish retry; `publish_async` with ack futures; fetch by bytes and with heartbeats; `consume` and `messages`; ordered consumers |
+| Key-Value | placement passed to the stream; update, create-or-update and list buckets; per-key TTLs and limit markers; `purge_deletes`; `updates_only` and `resume_from_revision`; err_code 10164 as a wrong last revision |
+| Object Store | the whole API, checked against nats.go in both directions |
+| Services | error handler and `NATSError`, stop on close; `respond_json`; response headers; `control_subject` and the error header constants |
+| Batch publishing | atomic batch publishing and fast-ingest publishing (orbit.go `jetstreamext`) |
+| Fixes | `next_msg` on a callback subscription raises `SyncSubRequired`; `connected?` is true while draining; repeated header keys keep all values; pending async publishes fail when the connection is lost; one `ConsumerDeleted` error |
+
+Still open from the lists below: KV mirror/source buckets and the remaining
+KV error classes and status fields; the services default endpoint,
+queue-group-disabled flag, `ErrArgRequired` and `:type` in info and stats;
+batch direct get; `StopAfter` and `PullMaxMessagesWithBytesLimit`; WebSocket
+compression and connection headers; and the custom dialer, `skip_host_lookup`,
+write buffer size and flusher timeout options.
+
 ## Missing features that the NQ Ruby client implements
 
 ### Core NATS
