@@ -246,9 +246,16 @@ module NATS
     end
     private :update_revision
 
-    # delete will place a delete marker and remove all previous revisions.
+    # delete will place a delete marker and leave all previous revisions,
+    # like Delete of nats.go.
+    # @param params [Hash] Options of the delete.
+    # @option params [Integer] :last Delete only if this is the latest
+    #   revision of the key, like LastRevision of nats.go.
+    # @return [Integer] The revision of the delete marker.
     # @raise [TTLOnDeleteNotSupportedError] When given a :ttl, which only
     #   purge takes.
+    # @raise [NATS::JetStream::Error::WrongLastSequence] When :last is not
+    #   the latest revision.
     def delete(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       raise TTLOnDeleteNotSupportedError if params[:ttl]
@@ -264,17 +271,25 @@ module NATS
       ack.seq
     end
 
-    # purge will remove the key and all revisions.
+    # purge will remove the key and all revisions, like Purge of nats.go.
     # @param params [Hash] Options of the purge.
     # @option params [Integer, Symbol] :ttl Seconds after which the server
     #   removes the purge marker, or :never, like PurgeTTL of nats.go. The
     #   bucket needs limit_marker_ttl (requires nats-server v2.11.0).
+    # @option params [Integer] :last Purge only if this is the latest
+    #   revision of the key, like LastRevision of nats.go, as delete does.
+    # @return [NATS::JetStream::PubAck] The ack of the purge marker, whose
+    #   seq is its revision.
+    # @raise [NATS::JetStream::Error::WrongLastSequence] When :last is not
+    #   the latest revision.
     def purge(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
       hdrs = {}
       hdrs[KV_OP] = KV_PURGE
       hdrs[ROLLUP] = MSG_ROLLUP_SUBJECT
+      last = params[:last] || 0
+      hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s if last > 0
       @js.publish("#{@put_pre}#{key}", header: hdrs, ttl: params[:ttl])
     end
 
