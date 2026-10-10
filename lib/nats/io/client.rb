@@ -516,6 +516,7 @@ module NATS
 
         # Reset reconnection attempts if connection is valid
         srv[:reconnect_attempts] = 0
+        srv[:last_auth_err] = nil
         srv[:auth_required] ||= true if @server_info[:auth_required]
 
         # Add back to rotation since successfully connected
@@ -530,6 +531,7 @@ module NATS
           srv[:auth_required] ||= true if @server_info[:auth_required]
           # The server will not support no_echo on a retry either.
           srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
+          auth_error_abort?(srv, e)
           server_pool << srv if can_reuse_server?(srv)
         end
 
@@ -1490,7 +1492,7 @@ module NATS
     # Handles protocol errors being sent by the server.
     def process_err(err)
       e = synchronize do
-        current = server_pool.first
+        current = current_server
         @last_err = server_error_for(err, current && current[:auth_required])
 
         # We cannot recover from auth errors so mark it to avoid
@@ -1500,6 +1502,9 @@ module NATS
         if current && @last_err.is_a?(NATS::IO::AuthError) && !@options[:ignore_auth_error_abort]
           current[:error_received] = true
         end
+        # Kept to compare with the auth error of the next attempt to
+        # reconnect to the server.
+        auth_error_abort?(current, @last_err)
 
         # Like nats.go, the connection stays up after a permissions
         # violation or when a subscription is refused, so only dispatch the
@@ -1524,6 +1529,26 @@ module NATS
       _, klass = SERVER_ERRORS.find { |prefix, _| text.start_with?(prefix) }
       klass ||= auth_required ? NATS::IO::AuthError : NATS::IO::ServerError
       klass.new(err)
+    end
+
+    # The server of the pool that the client is connected, or connecting,
+    # to; the head of the pool when it is not known.
+    def current_server
+      server_pool.find { |srv| srv[:uri].equal?(@uri) } || server_pool.first
+    end
+
+    # Whether srv refused the client with the same auth error as the last
+    # time, with no connect in between, which aborts reconnecting like
+    # processAuthError of nats.go, unless ignore_auth_error_abort. Otherwise
+    # the auth error is kept to compare with the next one. Only the auth
+    # errors that nats.go tells apart count: authorization violations, and
+    # expired or revoked user and account authentications.
+    def auth_error_abort?(srv, err)
+      return false unless srv && err.is_a?(NATS::IO::AuthError) && !err.instance_of?(NATS::IO::AuthError)
+      return true if srv[:last_auth_err] == err.class && !@options[:ignore_auth_error_abort]
+
+      srv[:last_auth_err] = err.class
+      false
     end
 
     def process_msg(subject, sid, reply, data, header)
@@ -2254,6 +2279,7 @@ module NATS
 
         # Reset reconnection attempts if connection is valid
         srv[:reconnect_attempts] = 0
+        srv[:last_auth_err] = nil
         srv[:auth_required] ||= true if @server_info[:auth_required]
 
         # Add back to rotation since successfully connected
@@ -2265,6 +2291,7 @@ module NATS
         # to see whether need to take it out from rotation
         srv[:auth_required] ||= true if @server_info[:auth_required]
         srv[:error_received] = true if e.is_a?(NATS::IO::NoEchoNotSupported)
+        abort = synchronize { auth_error_abort?(srv, e) }
         server_pool << srv if can_reuse_server?(srv)
 
         @last_err = e
@@ -2272,6 +2299,14 @@ module NATS
         # Trigger async error handler
         err_cb_call(self, e, nil) if @err_cb
         reconnect_error_cb_call(e)
+
+        # Like nats.go, the same auth error twice in a row from a server
+        # stops reconnecting, and closes the connection, unless
+        # ignore_auth_error_abort.
+        if abort
+          close_with_callbacks
+          return
+        end
 
         # Continue retrying until there are no options left in the server pool
         retry

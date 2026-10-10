@@ -266,6 +266,10 @@ module NATS
 
     def server_error_for: (String, bool?) -> NATS::IO::Error
 
+    def current_server: () -> Hash[Symbol, untyped]?
+
+    def auth_error_abort?: (Hash[Symbol, untyped]?, Exception?) -> bool
+
     def process_msg: (String, String, String, String, String) -> void
 
     def subscribed?: (NATS::Subscription) -> bool

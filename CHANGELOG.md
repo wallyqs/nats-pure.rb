@@ -33,6 +33,10 @@
 - `connect_timeout` also bounds the TCP dial and the TLS handshake, like `Timeout` of nats.go; the dial always took up to 2 seconds (`DEFAULT_CONNECT_TIMEOUT`) and the handshake had no limit. Both raise `NATS::IO::SocketTimeoutError` when it is up.
 - `no_echo: true` stops the server from delivering a connection's own publishes to its subscriptions, like `NoEcho` of nats.go. A server that does not support it (protocol 0) makes connect raise `NATS::IO::NoEchoNotSupported`, a `ConnectError`.
 
+### Changed
+
+- Like nats.go, a server that refuses the client with the same auth error twice in a row (an authorization violation, or expired or revoked user or account credentials), with no successful connect in between, stops the reconnecting and closes the connection, also with `max_reconnect_attempts: -1`, which retried such a server for good; `last_error` is that auth error. A single auth error behaves as before, and `ignore_auth_error_abort: true` keeps reconnecting, like `IgnoreAuthErrorAbort`. An auth error of a connected server now marks that server rather than the next one in the pool.
+
 ### Fixed
 
 - `msg.respond(data)` on a message with headers published a copy of the message, so the response carried the headers and the reply subject of the request. Like `Respond` of nats.go, it now publishes only the data to the reply subject. `msg.respond_msg(response)` now publishes the response to the reply subject of the message, which becomes its subject, like `RespondMsg`; it was published to its own subject.
