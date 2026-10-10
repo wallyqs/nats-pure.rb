@@ -1597,7 +1597,13 @@ module NATS
 
         # Like nats.go, the connection stays up after a permissions
         # violation or when a subscription is refused, so only dispatch the
-        # error callback, while holding the lock.
+        # error callback, while holding the lock. With
+        # permission_err_on_subscribe, a refused subscription gets the
+        # error, below.
+        if @last_err.is_a?(NATS::IO::PermissionViolation) && @options[:permission_err_on_subscribe]
+          denied = denied_subscriptions(@last_err)
+          next denied unless denied.empty?
+        end
         if @last_err.is_a?(NATS::IO::PermissionViolation) || @last_err.is_a?(NATS::IO::MaxSubscriptionsExceeded)
           err_cb_call(self, @last_err, nil) if @err_cb
           return
@@ -1605,7 +1611,31 @@ module NATS
 
         @last_err
       end
-      process_op_error(e)
+      return process_op_error(e) unless e.is_a?(Array)
+
+      # Like PermissionErrOnSubscribe of nats.go, the subscriptions that the
+      # server refused take the error, which next_msg raises, and on_error
+      # gets each of them.
+      err = @last_err
+      e.each do |sub|
+        sub.send(:permission_error!, err)
+        synchronize { err_cb_call(self, err, sub) }
+      end
+    end
+
+    # The subscriptions that a permissions violation of the server is
+    # about, which do not have one yet, like nats.go: those of its subject
+    # and queue group, or of its sid when it tells it. The lock is held.
+    def denied_subscriptions(err)
+      subject = err.message[/Subscription to "(\S+)"/, 1]
+      return [] unless subject
+
+      queue = err.message[/using queue "(\S+)"/, 1]
+      sid = err.message[/\(sid "(\d+)"\)/, 1]
+      @subs.values.select do |sub|
+        sub.subject == subject && sub.queue.to_s == queue.to_s &&
+          (sid.nil? || sub.sid.to_s == sid) && !sub.send(:permission_error)
+      end
     end
 
     # Maps the text of an -ERR from the server to an error, like nats.go;
@@ -2522,6 +2552,8 @@ module NATS
 
         # Replay all subscriptions
         @subs.each_pair do |sid, sub|
+          # Like nats.go, the server decides again whether it allows them.
+          sub.send(:permission_error!, nil)
           @io.write("SUB #{sub.subject} #{sub.queue} #{sid}#{CR_LF}")
         end
 
