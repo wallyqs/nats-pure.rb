@@ -49,7 +49,7 @@ module NATS
 
       def get_last_msg: (String, String, ?Hash[Symbol, untyped]) -> JetStream::API::RawStreamMsg
 
-      def account_info: () -> Hash[Symbol, untyped]
+      def account_info: (?Hash[Symbol, untyped]) -> JetStream::API::AccountInfo
 
       private
 

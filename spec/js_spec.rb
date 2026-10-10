@@ -2083,7 +2083,8 @@ describe "JetStream" do
       expect(info[:num_pending]).to eql(1)
 
       js = nc.jetstream(domain: "estre")
-      info = js.account_info
+      # The AccountInfo Struct as the Hash that account_info returned before.
+      info = js.account_info.to_h
 
       # v2.11 starts to include API levels, and the level grows with
       # every server release, so don't pin it.
