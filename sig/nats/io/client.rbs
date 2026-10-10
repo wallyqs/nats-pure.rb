@@ -1,7 +1,15 @@
 module NATS
   # class << self
   def self.connect: (String?, Hash[Symbol, untyped]) -> NATS::Client
+
+  def self.new_inbox: (?String) -> String
+
+  private
+
+  def self.check_inbox_prefix!: (String?) -> void
   # end class << self
+
+  INBOX_NUID_LOCK: Thread::Mutex
 
   module Status
     DISCONNECTED: Integer
@@ -367,6 +375,8 @@ module NATS
     DEFAULT_CONNECT_TIMEOUT: 2
     DEFAULT_READ_WRITE_TIMEOUT: 2
     DEFAULT_DRAIN_TIMEOUT: 30
+
+    DEFAULT_INBOX_PREFIX: String
 
     DEFAULT_SUB_PENDING_MSGS_LIMIT: 65536
     DEFAULT_SUB_PENDING_BYTES_LIMIT: Integer
