@@ -28,6 +28,12 @@ module NATS
 
     def ordered_consumer: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::OrderedConsumer
 
+    def stream: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::Stream
+
+    def consumer: (String, String, ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+    def push_consumer: (String, String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
     private
 
     def publish_header: (Hash[Symbol, untyped]) -> Hash[String, untyped]?
