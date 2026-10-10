@@ -87,4 +87,13 @@ describe "JetStream async publish - connection lost or closed" do
     expect(js.publish_async("again", "2").wait(5).seq).to eql(2)
     nc.close
   end
+
+  it "leaves services stopping on close" do
+    nc = NATS.connect(@s.uri)
+    service = nc.services.add(name: "conn-close", version: "1.0.0")
+    expect(service.stopped?).to be(false)
+
+    nc.close
+    expect(service.stopped?).to be(true)
+  end
 end

@@ -1,0 +1,20 @@
+module NATS
+  class Service
+    class Error < StandardError
+    end
+
+    class NATSError < NATS::Service::Error
+      attr_reader subject: String
+      attr_reader description: String
+      attr_reader error: Exception?
+
+      def initialize: (String subject, String description, ?Exception? error) -> void
+
+      def ==: (untyped other) -> bool
+
+      def eql?: (untyped other) -> bool
+
+      def hash: () -> Integer
+    end
+  end
+end

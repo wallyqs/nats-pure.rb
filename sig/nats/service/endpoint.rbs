@@ -1,0 +1,7 @@
+module NATS
+  class Service
+    class Endpoint
+      def subscription: () -> NATS::Subscription
+    end
+  end
+end

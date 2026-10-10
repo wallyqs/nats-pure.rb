@@ -92,6 +92,11 @@ module NATS
         stats.reset
       end
 
+      # The subscription that receives the endpoint's requests.
+      def subscription
+        @handler
+      end
+
       def stopped?
         @stopped
       end
@@ -120,9 +125,9 @@ module NATS
           block.call(req)
           stats.error(req.error) if req.error
         rescue NATS::Error => error
-          stats.error(error)
-          service.stop(error)
-
+          # Passed to the error handler of the service, which stops, and
+          # then to the client's error callback.
+          service.send(:report_error, error, subject, self)
           raise error
         rescue => error
           stats.error(error)

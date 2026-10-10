@@ -2183,6 +2183,9 @@ module NATS
     end
 
     def err_cb_call(nc, e, sub)
+      # Services stop on the errors of their subscriptions, like nats.go micro.
+      @_services&.send(:handle_async_error, e, sub) if sub
+
       return unless @err_cb
 
       cb = @err_cb
@@ -2720,8 +2723,8 @@ module NATS
 
       return unless do_cbs
 
-      # Like nats.go, JetStream contexts fail the acks they wait for once
-      # their connection is closed.
+      # Like nats.go micro, services stop once their connection is closed,
+      # and JetStream contexts fail the acks they wait for.
       notify_status_listeners(:close)
 
       closed_subs&.each { |sub| sub.send(:closed!, wait: false) }
