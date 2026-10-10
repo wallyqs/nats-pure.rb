@@ -50,6 +50,9 @@ module NATS
           # that other fetches took for the fetches waiting for their pulls.
           @pulls = 0
           @pull_ends = {}
+          # A message left to the subscription that did not fit in the
+          # max_bytes of a fetch, for the next fetch.
+          @held = []
         end
       end
 
@@ -100,6 +103,11 @@ module NATS
       #   minimums, either will do.
       # @option params [Integer] :priority With the prioritized priority policy, the priority
       #   of the pull, from 0, served first, to 9 (requires nats-server v2.12.0).
+      # @option params [Integer] :max_bytes Most bytes to take, which the server
+      #   counts as the subject, reply, header and data of each message: the fetch
+      #   ends once the batch or these bytes are taken, or the next message would
+      #   exceed them. Messages that earlier pulls left to the subscription count
+      #   too. To fetch by bytes only, pass a large batch.
       # @yieldparam msg [NATS::Msg] Each delivery, as it comes.
       # @return [Array<NATS::Msg>]
       # @raise [NATS::Timeout] When a fetch that waits got no messages before its timeout.
@@ -113,6 +121,9 @@ module NATS
       #   was unpinned. The next fetch can be pinned again. The server counts the
       #   priority_timeout of the consumer from each pull it gets, not while a pull
       #   waits, so keep the fetch timeout, plus the time between fetches, below it.
+      # @raise [NATS::JetStream::Error::MaxBytesExceeded] With :max_bytes, when the
+      #   server ended the pull before the fetch got messages, as the next message
+      #   would exceed them.
       # @raise [NATS::JetStream::Error] When the server ended the pull of the fetch
       #   with an error before it got messages.
       def fetch(batch = 1, params = {}, &block)
@@ -125,6 +136,10 @@ module NATS
 
           raise ArgumentError.new("nats: #{min} should be an integer of at least 1")
         end
+        max_bytes = params[:max_bytes]
+        if max_bytes && !(max_bytes.is_a?(Integer) && max_bytes >= 1)
+          raise ArgumentError.new("nats: max_bytes should be an integer of at least 1")
+        end
         timeout = params[:timeout] || (params[:no_wait] ? 1 : 5)
         unless timeout.is_a?(Numeric) && timeout.positive? && timeout.finite?
           raise ArgumentError.new("nats: timeout should be a finite positive number")
@@ -132,16 +147,15 @@ module NATS
 
         deadline = MonotonicTime.now + timeout
         msgs = []
-        # Take what earlier pulls delivered first.
-        while msgs.size < batch && (msg = next_pending)
-          collect(msgs, msg, &block)
-        end
-        return msgs if msgs.size == batch || (!msgs.empty? && MonotonicTime.now >= deadline)
+        # Take what earlier pulls delivered first, while it fits.
+        bytes_left = take_pending(msgs, batch, max_bytes, &block)
+        return msgs if msgs.size == batch || bytes_left == 0 || (!msgs.empty? && MonotonicTime.now >= deadline)
 
         # Like the nats.go jetstream package and nats.rs, pull once, for the
         # rest of the batch.
         next_req = {
           batch: batch - msgs.size,
+          max_bytes: bytes_left,
           **params.slice(:group, :min_pending, :min_ack_pending, :priority)
         }
         if params[:no_wait]
@@ -176,7 +190,7 @@ module NATS
         reply = synchronize { "#{@subject.chomp("*")}#{@pulls += 1}" }
         synchronize { @pull_ends[reply] = nil }
         pin_id = pull(next_req, reply)
-        receive(msgs, next_req[:batch], pin_id, -> { wait_pending(reply, deadline) }, &block)
+        receive(msgs, next_req, pin_id, -> { wait_pending(reply, deadline) }, &block)
       ensure
         synchronize { @pull_ends.delete(reply) }
       end
@@ -188,19 +202,29 @@ module NATS
         inbox = @nc.subscribe(@nc.new_inbox)
         pulled = MonotonicTime.now
         pin_id = pull(next_req, inbox.subject)
-        ended = receive(msgs, next_req[:batch], pin_id, -> { next_reply(inbox, deadline) }, &block)
+        ended = receive(msgs, next_req, pin_id, -> { next_reply(inbox, deadline) }, &block)
       ensure
         release(inbox, ended ? 0 : pulled + UNCHECKED_PULL_AGE - MonotonicTime.now) if inbox
       end
 
       # receive collects the messages a pull delivers. It returns true once
-      # the pull delivered its batch or the server ended it, and false when
-      # nothing came before the deadline.
-      def receive(msgs, batch, pin_id, next_msg, &block)
-        batch.times do
+      # the pull delivered its batch or max_bytes, or the server ended it,
+      # and false when nothing came before the deadline.
+      def receive(msgs, next_req, pin_id, next_msg, &block)
+        count = 0
+        bytes = 0
+        loop do
           msg = next_msg.call
           return false if msg.nil?
-          next collect(msgs, msg, &block) unless JS.is_status_msg(msg)
+
+          unless JS.is_status_msg(msg)
+            collect(msgs, msg, &block)
+            count += 1
+            bytes += JS.msg_size(msg) if next_req[:max_bytes]
+            return true if count == next_req[:batch] || (next_req[:max_bytes] && bytes >= next_req[:max_bytes])
+
+            next
+          end
 
           forget_pin(pin_id) if msg.header[JS::Header::Status] == JS::Status::PinIdMismatch
           # An error ends the fetch too, with the messages taken before it.
@@ -208,7 +232,29 @@ module NATS
 
           raise JS.from_msg(msg)
         end
-        true
+      end
+
+      # take_pending adds the messages that earlier pulls left to those of
+      # the fetch, up to the batch, and while they fit in max_bytes, if
+      # given. The first that does not fit is held for the next fetch, which
+      # ends the fetch; one that fits in no fetch raises, as the server ends
+      # a pull for it. Returns the bytes still left, if max_bytes is given.
+      def take_pending(msgs, batch, max_bytes, &block)
+        bytes_left = max_bytes
+        while msgs.size < batch && (msg = next_pending)
+          if bytes_left
+            size = JS.msg_size(msg)
+            if size > bytes_left
+              synchronize { @held.unshift(msg) }
+              return 0 unless msgs.empty?
+
+              raise ::NATS::JetStream::Error::MaxBytesExceeded.new({description: "Message Size Exceeds MaxBytes"})
+            end
+            bytes_left -= size
+          end
+          collect(msgs, msg, &block)
+        end
+        bytes_left
       end
 
       # release unsubscribes the inbox of a pull that did not wait, handing
@@ -264,10 +310,14 @@ module NATS
       end
 
       # pull_ended? tells whether a status only says that a pull ended:
-      # 404 No Messages, or 408, as the pull expired or other pulls wait
-      # for more messages than are pending. Other statuses are errors.
+      # 404 No Messages, 408, as the pull expired or other pulls wait for
+      # more messages than are pending, or 409 Batch Completed, as the pull
+      # got its batch before its max_bytes. Other statuses are errors.
       def pull_ended?(msg)
-        [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(msg.header[JS::Header::Status])
+        status = msg.header[JS::Header::Status]
+        return true if [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(status)
+
+        status == JS::Status::Conflict && msg.header[JS::Header::Desc].to_s.downcase.include?("batch completed")
       end
 
       # pull_expires is how long a pull may wait, in nanoseconds: until the
@@ -342,6 +392,7 @@ module NATS
       # waiting for one here would stop it.
       def pop_pending
         synchronize do
+          return @held.shift unless @held.empty?
           return if @pending_queue.empty?
 
           msg = @pending_queue.pop

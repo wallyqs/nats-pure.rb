@@ -83,6 +83,10 @@ describe "Client - repeated header names" do
     expect(direct.slice("X-A", "X-B")).to eql(expected)
     expect(direct["Nats-Stream"]).to eql("MULTIHDR")
 
+    # Its size, for max_bytes, counts a line for each value.
+    hdr_size = "NATS/1.0\r\nX-A: 1\r\nX-A: 2\r\nX-B: 3\r\n\r\n".bytesize
+    expect(NATS::JetStream.const_get(:JS).msg_size(msg)).to eql(msg.subject.bytesize + msg.reply.bytesize + 3 + hdr_size)
+
     js.delete_stream("MULTIHDR")
     nc.close
   end
