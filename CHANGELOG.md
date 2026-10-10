@@ -4,6 +4,7 @@
 
 ### Added
 
+- `connect_timeout` also bounds the TCP dial and the TLS handshake, like `Timeout` of nats.go; the dial always took up to 2 seconds (`DEFAULT_CONNECT_TIMEOUT`) and the handshake had no limit. Both raise `NATS::IO::SocketTimeoutError` when it is up.
 - `no_echo: true` stops the server from delivering a connection's own publishes to its subscriptions, like `NoEcho` of nats.go. A server that does not support it (protocol 0) makes connect raise `NATS::IO::NoEchoNotSupported`, a `ConnectError`.
 
 ## v2.7.0

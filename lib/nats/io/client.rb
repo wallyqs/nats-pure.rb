@@ -1817,7 +1817,7 @@ module NATS
       socket_class.new(
         uri: @uri,
         tls: {context: tls_context, hostname: @hostname},
-        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
+        connect_timeout: @options[:connect_timeout]
       )
     end
 
@@ -2043,7 +2043,7 @@ module NATS
         # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
         tls_socket.hostname = @tls[:hostname]
 
-        tls_socket.connect
+        tls_handshake(tls_socket)
         @socket = tls_socket
       end
 
@@ -2127,6 +2127,26 @@ module NATS
 
       private
 
+      # Performs the TLS handshake, giving up after the connect timeout.
+      def tls_handshake(tls_socket)
+        return tls_socket.connect unless @connect_timeout
+
+        deadline = MonotonicTime.now + @connect_timeout
+        begin
+          tls_socket.connect_nonblock
+        rescue ::IO::WaitReadable, ::IO::WaitWritable => e
+          left = deadline - MonotonicTime.now
+          ready = if e.is_a?(::IO::WaitReadable)
+            ::IO.select([tls_socket], nil, nil, [left, 0].max)
+          else
+            ::IO.select(nil, [tls_socket], nil, [left, 0].max)
+          end
+          raise NATS::IO::SocketTimeoutError, "nats: timeout during TLS handshake" unless ready
+
+          retry
+        end
+      end
+
       def connect_addrinfo(ai, port, timeout)
         sock = ::Socket.new(::Socket.const_get(ai[0]), ::Socket::SOCK_STREAM, 0)
         sockaddr = ::Socket.pack_sockaddr_in(port, ai[3])
@@ -2134,8 +2154,9 @@ module NATS
         begin
           sock.connect_nonblock(sockaddr)
         rescue Errno::EINPROGRESS, Errno::EALREADY, ::IO::WaitWritable
-          unless ::IO.select(nil, [sock], nil, @connect_timeout)
-            raise NATS::IO::SocketTimeoutError
+          unless ::IO.select(nil, [sock], nil, timeout)
+            sock.close
+            raise NATS::IO::SocketTimeoutError, "nats: timeout dialing #{ai[3]}:#{port}"
           end
 
           # Confirm that connection was established

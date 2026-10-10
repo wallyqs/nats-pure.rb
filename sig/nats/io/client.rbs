@@ -286,6 +286,8 @@ module NATS
 
       private
 
+      def tls_handshake: (OpenSSL::SSL::SSLSocket) -> void
+
       def connect_addrinfo: (String | Integer, Integer, Numeric) -> ::Socket
     end
   end
