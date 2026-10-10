@@ -21,6 +21,8 @@ module NATS
 
       def handle_control_msg: (NATS::Msg) -> void
 
+      def check_sequence: (NATS::Msg) -> void
+
       def delivered!: () -> void
 
       def respond_flow_control: (String?) -> void
