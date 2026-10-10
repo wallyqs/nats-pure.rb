@@ -26,5 +26,11 @@ module NATS
 
       def initialize: (String) -> void
     end
+
+    class TTLOnDeleteNotSupportedError < NATS::KeyValue::Error
+    end
+
+    class LimitMarkerTTLNotSupportedError < NATS::KeyValue::Error
+    end
   end
 end
