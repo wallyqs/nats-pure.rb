@@ -238,8 +238,12 @@ has some config, info and meta fields only as `planned`.
   matching `JSErrCode*` constants and the client batch errors are missing:
   batch closed, empty batch, invalid batch ack and invalid option.
   `err_code` 10204 with status 400 maps to `ConsumerInvalidReset` in
-  `JS.from_error`. NQ also uses 10204 for the fast-batch invalid pattern, so
-  that error may be misreported. Confirm this against a server.
+  `JS.from_error`, which is correct: nats-server v2.15.0's `errors.json`
+  assigns 10204 to `JSConsumerInvalidResetErr`, and the batch "invalid
+  pattern" error is 10206 (`JSBatchPublishInvalidPatternErr`). The pinned
+  orbit.go (`jetstreamext/errors.go:36`), and NQ after it, give
+  `JSErrCodeFastBatchInvalidPattern` the value 10204, which disagrees with
+  the server.
 
 ## Oracle features that NQ Ruby also lacks
 
