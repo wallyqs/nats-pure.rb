@@ -3,6 +3,8 @@ module NATS
     extend Manager
     extend KeyValue::Manager
 
+    DEFAULT_API_PREFIX: String
+
     DEFAULT_PUB_RETRY_ATTEMPTS: Integer
 
     DEFAULT_PUB_RETRY_WAIT: Float

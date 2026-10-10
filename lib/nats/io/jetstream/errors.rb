@@ -16,6 +16,83 @@
 
 module NATS
   class JetStream
+    # ErrorCode names the err_codes of the JetStream API errors that nats.go
+    # names, the JSErrCode constants of nats.go, from errors.json of
+    # nats-server. An APIError has its err_code as err_code.
+    #
+    # @example
+    #   begin
+    #     js.consumer_info("ORDERS", "missing")
+    #   rescue NATS::JetStream::Error::APIError => e
+    #     raise unless e.err_code == NATS::JetStream::ErrorCode::CONSUMER_NOT_FOUND
+    #   end
+    module ErrorCode
+      # A request the server cannot take, as an empty one (JSErrCodeBadRequest).
+      BAD_REQUEST = 10003
+      # JetStream is temporarily unavailable, as when a cluster has no
+      # meta leader (JSErrCodeJetStreamNotAvailable of the nats package).
+      JETSTREAM_NOT_AVAILABLE = 10008
+      # The consumer could not be created (JSErrCodeConsumerCreate).
+      CONSUMER_CREATE = 10012
+      # Another consumer has the name (JSErrCodeConsumerNameExists).
+      CONSUMER_NAME_EXISTS = 10013
+      # No consumer has the name (JSErrCodeConsumerNotFound).
+      CONSUMER_NOT_FOUND = 10014
+      # Not enough resources for the request (JSErrCodeInsufficientResourcesErr
+      # of the nats package).
+      INSUFFICIENT_RESOURCES = 10023
+      # The stream or account has as many consumers as it may
+      # (JSErrCodeMaximumConsumersLimit).
+      MAXIMUM_CONSUMERS_LIMIT = 10026
+      # No message was found (JSErrCodeMessageNotFound).
+      MESSAGE_NOT_FOUND = 10037
+      # The account has no JetStream (JSErrCodeJetStreamNotEnabledForAccount).
+      JETSTREAM_NOT_ENABLED_FOR_ACCOUNT = 10039
+      # Another stream has the name, with another config (JSErrCodeStreamNameInUse).
+      STREAM_NAME_IN_USE = 10058
+      # No stream has the name (JSErrCodeStreamNotFound).
+      STREAM_NOT_FOUND = 10059
+      # The last sequence is not the one expected (JSErrCodeStreamWrongLastSequence).
+      STREAM_WRONG_LAST_SEQUENCE = 10071
+      # The server has no JetStream (JSErrCodeJetStreamNotEnabled).
+      JETSTREAM_NOT_ENABLED = 10076
+      # A durable push consumer was created again while still active
+      # (JSErrCodeConsumerAlreadyExists).
+      CONSUMER_ALREADY_EXISTS = 10105
+      # A consumer has both a filter_subject and filter_subjects
+      # (JSErrCodeDuplicateFilterSubjects).
+      DUPLICATE_FILTER_SUBJECTS = 10136
+      # The filter subjects of a consumer overlap (JSErrCodeOverlappingFilterSubjects).
+      OVERLAPPING_FILTER_SUBJECTS = 10138
+      # A filter subject of a consumer is empty (JSErrCodeConsumerEmptyFilter).
+      CONSUMER_EMPTY_FILTER = 10139
+      # The consumer to create exists with another config (JSErrCodeConsumerExists).
+      CONSUMER_EXISTS = 10148
+      # The consumer to update does not exist (JSErrCodeConsumerDoesNotExist).
+      CONSUMER_DOES_NOT_EXIST = 10149
+      # The last sequence is not the one expected, on a replicated stream
+      # (JSErrCodeStreamWrongLastSequenceConstant).
+      STREAM_WRONG_LAST_SEQUENCE_CONSTANT = 10164
+      # A mirror cannot schedule messages (JSErrCodeMirrorWithMsgSchedules).
+      MIRROR_WITH_MSG_SCHEDULES = 10186
+      # A stream with sources cannot schedule messages (JSErrCodeSourceWithMsgSchedules).
+      SOURCE_WITH_MSG_SCHEDULES = 10187
+      # The stream does not allow message schedules (JSErrCodeMessageSchedulesDisabled).
+      MESSAGE_SCHEDULES_DISABLED = 10188
+      # The pattern of a message schedule is invalid (JSErrCodeSchedulePatternInvalid).
+      SCHEDULE_PATTERN_INVALID = 10189
+      # The target of a message schedule is invalid (JSErrCodeScheduleTargetInvalid).
+      SCHEDULE_TARGET_INVALID = 10190
+      # The TTL of a message schedule is invalid (JSErrCodeScheduleTTLInvalid).
+      SCHEDULE_TTL_INVALID = 10191
+      # The rollup of a message schedule is invalid (JSErrCodeScheduleRollupInvalid).
+      SCHEDULE_ROLLUP_INVALID = 10192
+      # The source of a message schedule is invalid (JSErrCodeScheduleSourceInvalid).
+      SCHEDULE_SOURCE_INVALID = 10203
+      # The reset of a consumer is invalid (JSErrCodeConsumerInvalidReset).
+      CONSUMER_INVALID_RESET = 10204
+    end
+
     # Error is any error that may arise when interacting with JetStream.
     class Error < NATS::IO::Error
       # When there is a NATS::IO::NoResponders error after making a publish request.
@@ -250,6 +327,11 @@ module NATS
           @code ||= 400
         end
       end
+
+      # When the server takes a request as a bad one, with err_code 10003
+      # (ErrorCode::BAD_REQUEST), as an empty request where it needs one, or
+      # a purge with both a sequence and a keep, like ErrBadRequest of nats.go.
+      class JSBadRequest < BadRequest; ERR_CODE = ErrorCode::BAD_REQUEST; end
 
       # When a stream is created with the name of a stream that has a
       # different configuration.

@@ -41,6 +41,11 @@ module NATS
   #   js = nc.jetstream()
   #
   class JetStream
+    # The prefix of the subjects of the JetStream API, which a context uses
+    # unless given a prefix or a domain, like DefaultAPIPrefix of nats.go,
+    # without its trailing dot.
+    DEFAULT_API_PREFIX = "$JS.API"
+
     # How many times publish retries a message that no stream responded to,
     # like DefaultPubRetryAttempts of nats.go.
     DEFAULT_PUB_RETRY_ATTEMPTS = 2
@@ -102,7 +107,7 @@ module NATS
       elsif params[:domain]
         "$JS.#{params[:domain]}.API"
       else
-        JS::DefaultAPIPrefix
+        DEFAULT_API_PREFIX
       end
       @opts = params
       @opts[:timeout] ||= 5 # seconds
