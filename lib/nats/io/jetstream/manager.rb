@@ -447,7 +447,10 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [String] The name of the JetStream stream for the subject.
+      # @raise [JetStream::Error::InvalidSubject] When the subject is invalid.
+      # @raise [JetStream::Error::NotFound] When no stream has the subject.
       def find_stream_name_by_subject(subject, params = {})
+        validate_subject(subject)
         req_subject = "#{@prefix}.STREAM.NAMES"
         req = {subject: subject}
         result = api_request(req_subject, req.to_json, params)
@@ -526,6 +529,12 @@ module NATS
         if action == "update" && (config[:name].nil? || config[:name].empty?)
           raise ArgumentError.new("nats: the consumer to update needs a name or durable name")
         end
+        # Like nats.go, check the filter subjects before asking the server:
+        # the filter subject goes into the subject of the request. Empty
+        # ones are left to the server, which raises EmptyFilter for them.
+        (config[:filter_subjects].to_a + [config[:filter_subject]]).each do |subject|
+          validate_subject(subject) unless subject.to_s.empty?
+        end
         req_subject = if config[:name]
           ###############################################################################
           #                                                                             #
@@ -582,6 +591,17 @@ module NATS
           raise JetStream::Error::ConsumerMultipleFilterSubjectsNotSupported.new("nats: multiple consumer filter subjects not supported by nats-server")
         end
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # validate_subject raises InvalidSubject for a subject that is empty,
+      # starts or ends with a ".", has whitespace, or a ">" before its end,
+      # like validateSubject of nats.go.
+      def validate_subject(subject)
+        subject = subject.to_s
+        return unless subject.empty? || subject.start_with?(".") || subject.end_with?(".") ||
+          subject.match?(/\s/) || subject.chop.include?(">")
+
+        raise JetStream::Error::InvalidSubject.new(subject)
       end
 
       # consumer_info? tells whether a response that is not an error has

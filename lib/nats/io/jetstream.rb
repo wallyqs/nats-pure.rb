@@ -380,6 +380,8 @@ module NATS
           # Use the first subject to try to find the stream.
           streams = subject.map do |s|
             find_stream_name_by_subject(s)
+          rescue NATS::JetStream::Error::InvalidSubject
+            raise
           rescue NATS::JetStream::Error::NotFound
             raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
           end
@@ -536,6 +538,8 @@ module NATS
           # Use the first subject to try to find the stream.
           streams = subject.map do |s|
             find_stream_name_by_subject(s)
+          rescue NATS::JetStream::Error::InvalidSubject
+            raise
           rescue NATS::JetStream::Error::NotFound
             raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
           end
