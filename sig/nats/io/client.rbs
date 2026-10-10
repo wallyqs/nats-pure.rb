@@ -160,6 +160,8 @@ module NATS
 
     def new_inbox: () -> String
 
+    def new_resp_inbox: () -> String
+
     def connected_url_redacted: () -> String?
 
     def connected_addr: () -> String?

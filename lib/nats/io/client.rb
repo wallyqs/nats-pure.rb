@@ -705,7 +705,7 @@ module NATS
       response = nil
       timeout = opts[:timeout] ||= 0.5
       synchronize do
-        start_resp_mux_sub! unless @resp_sub_prefix
+        start_resp_mux_sub! unless @resp_sub
 
         # Create token for this request.
         token = @nuid.next
@@ -756,7 +756,7 @@ module NATS
       response = nil
       timeout = opts[:timeout] ||= 0.5
       synchronize do
-        start_resp_mux_sub! unless @resp_sub_prefix
+        start_resp_mux_sub! unless @resp_sub
 
         # Create token for this request.
         token = @nuid.next
@@ -996,6 +996,21 @@ module NATS
     # @return [String]
     def new_inbox
       "#{@inbox_prefix}.#{@nuid.next}"
+    end
+
+    # A unique reply subject under the prefix of the subscription that
+    # request uses for all responses, like NewRespInbox of nats.go: the
+    # prefix, which is a new_inbox, a dot and a token. Like nats.go, it
+    # does not subscribe; the first request does.
+    #
+    # @example
+    #   nc.new_resp_inbox # => "_INBOX.Wm3Ea9Q3UqcItKOMN6ALrs.Wm3Ea9Q3UqcItKOMN6ALu2"
+    # @return [String]
+    def new_resp_inbox
+      synchronize do
+        @resp_sub_prefix ||= new_inbox
+        "#{@resp_sub_prefix}.#{@nuid.next}"
+      end
     end
 
     def connected_server
@@ -2615,7 +2630,7 @@ module NATS
     # Prepares requests subscription that handles the responses
     # for the new style request response.
     def start_resp_mux_sub!
-      @resp_sub_prefix = new_inbox
+      @resp_sub_prefix ||= new_inbox
       @resp_map = Hash.new { |h, k| h[k] = {} }
 
       @resp_sub = Subscription.new
@@ -2633,6 +2648,10 @@ module NATS
         token = msg.subject.split(".").last
         future = nil
         synchronize do
+          # Drop responses that no request waits for, as to inboxes of
+          # new_resp_inbox or after a timeout, like nats.go.
+          next unless @resp_map.key?(token)
+
           future = @resp_map[token][:future]
           @resp_map[token][:response] = msg
         end
