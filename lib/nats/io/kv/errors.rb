@@ -50,8 +50,17 @@ module NATS
     # When it is an invalid bucket.
     class BadBucketError < Error; end
 
+    # Included in the errors of a revision that is not the latest of the
+    # key, like ErrKeyRevisionMismatch of nats.go, which Update, Delete and
+    # Purge return: KeyWrongLastSequenceError of update, and
+    # KeyRevisionMismatchError of delete and purge with :last, so that
+    # `rescue NATS::KeyValue::KeyRevisionMismatch` catches them all.
+    module KeyRevisionMismatch; end
+
     # When the result is an unexpected sequence.
     class KeyWrongLastSequenceError < Error
+      include KeyRevisionMismatch
+
       def initialize(msg)
         @msg = msg
       end
@@ -65,6 +74,15 @@ module NATS
     # It is a KeyWrongLastSequenceError, which create raised before, with
     # the same message.
     class KeyExistsError < KeyWrongLastSequenceError; end
+
+    # When delete or purge is given a :last revision that is not the latest
+    # of the key, like ErrKeyRevisionMismatch of nats.go. It is the
+    # NATS::JetStream::Error::WrongLastSequence that they raised before,
+    # with its err_code, and a KeyRevisionMismatch like the
+    # KeyWrongLastSequenceError of update.
+    class KeyRevisionMismatchError < NATS::JetStream::Error::WrongLastSequence
+      include KeyRevisionMismatch
+    end
 
     # When a bucket name is invalid, like ErrInvalidBucketName of nats.go:
     # it is not made of letters, digits, "_" and "-". It is an

@@ -51,6 +51,8 @@ module NATS
 
     private def update_revision: (String, untyped, Integer, (Integer | :never)?) -> Integer
 
+    private def revision_mismatch: [T] () { () -> T } -> T
+
     def delete: (String, ?Hash[Symbol, untyped]) -> Integer
 
     def purge: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PubAck

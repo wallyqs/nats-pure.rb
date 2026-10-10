@@ -254,8 +254,8 @@ module NATS
     # @return [Integer] The revision of the delete marker.
     # @raise [TTLOnDeleteNotSupportedError] When given a :ttl, which only
     #   purge takes.
-    # @raise [NATS::JetStream::Error::WrongLastSequence] When :last is not
-    #   the latest revision.
+    # @raise [KeyRevisionMismatchError] When :last is not the latest
+    #   revision, a NATS::JetStream::Error::WrongLastSequence.
     def delete(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       raise TTLOnDeleteNotSupportedError if params[:ttl]
@@ -266,7 +266,7 @@ module NATS
       if last > 0
         hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
       end
-      ack = @js.publish("#{@put_pre}#{key}", header: hdrs)
+      ack = revision_mismatch { @js.publish("#{@put_pre}#{key}", header: hdrs) }
 
       ack.seq
     end
@@ -280,8 +280,8 @@ module NATS
     #   revision of the key, like LastRevision of nats.go, as delete does.
     # @return [NATS::JetStream::PubAck] The ack of the purge marker, whose
     #   seq is its revision.
-    # @raise [NATS::JetStream::Error::WrongLastSequence] When :last is not
-    #   the latest revision.
+    # @raise [KeyRevisionMismatchError] When :last is not the latest
+    #   revision, a NATS::JetStream::Error::WrongLastSequence.
     def purge(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
@@ -290,8 +290,20 @@ module NATS
       hdrs[ROLLUP] = MSG_ROLLUP_SUBJECT
       last = params[:last] || 0
       hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s if last > 0
-      @js.publish("#{@put_pre}#{key}", header: hdrs, ttl: params[:ttl])
+      revision_mismatch { @js.publish("#{@put_pre}#{key}", header: hdrs, ttl: params[:ttl]) }
     end
+
+    # revision_mismatch raises the wrong last sequence of a delete or purge
+    # as a KeyRevisionMismatchError, like mapRevisionMismatch of nats.go.
+    def revision_mismatch
+      yield
+    rescue NATS::JetStream::Error::APIError => err
+      raise err unless WRONG_LAST_SEQUENCE_ERR_CODES.include?(err.err_code) && err.code == 400
+
+      raise KeyRevisionMismatchError.new(code: err.code, err_code: err.err_code, description: err.description,
+        stream: err.stream, consumer: err.consumer, seq: err.seq)
+    end
+    private :revision_mismatch
 
     # How old the delete and purge markers that purge_deletes removes have to
     # be by default, in seconds.
