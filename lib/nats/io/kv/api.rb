@@ -38,6 +38,17 @@ module NATS
         # Seconds to keep the markers that the server leaves when a TTL
         # removes a key, which per-key TTLs need (requires nats-server v2.11.0).
         :limit_marker_ttl,
+        # Makes the bucket a read-only mirror of another bucket, like Mirror
+        # of nats.go: a stream source as a Hash, such as `{name: "ORIGIN"}`,
+        # whose name is that of the bucket or of its stream. A `domain:`
+        # mirrors a bucket of another JetStream domain. Writes to the mirror
+        # go to the origin bucket.
+        :mirror,
+        # Makes the bucket take the keys of other buckets, like Sources of
+        # nats.go: stream sources as Hashes, such as `[{name: "A"}]`. Their
+        # keys are mapped to this bucket, unless a source has its own
+        # `subject_transforms:`, which then takes the full stream name.
+        :sources,
         keyword_init: true
       ) do
         def initialize(opts = {})

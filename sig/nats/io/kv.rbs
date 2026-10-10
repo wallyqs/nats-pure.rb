@@ -13,6 +13,7 @@ module NATS
     @name: String
     @stream: String
     @pre: String
+    @put_pre: String
     @js: NATS::JetStream
     @direct: bool
 

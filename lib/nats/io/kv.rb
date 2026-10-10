@@ -70,6 +70,9 @@ module NATS
       @name = opts[:name]
       @stream = opts[:stream]
       @pre = opts[:pre]
+      # Where the writes go, which differs from where the reads go for a
+      # mirror, whose writes go to its origin.
+      @put_pre = opts[:put_pre] || @pre
       @js = opts[:js]
       @direct = opts[:direct]
       @validate_keys = opts[:validate_keys]
@@ -128,7 +131,7 @@ module NATS
     def put(key, value)
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
-      ack = @js.publish("#{@pre}#{key}", value)
+      ack = @js.publish("#{@put_pre}#{key}", value)
       ack.seq
     end
 
@@ -187,7 +190,7 @@ module NATS
       hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
       ack = nil
       begin
-        ack = @js.publish("#{@pre}#{key}", value, header: hdrs, ttl: ttl)
+        ack = @js.publish("#{@put_pre}#{key}", value, header: hdrs, ttl: ttl)
       rescue NATS::JetStream::Error::APIError => err
         if WRONG_LAST_SEQUENCE_ERR_CODES.include?(err.err_code)
           raise KeyWrongLastSequenceError.new(err.description)
@@ -213,7 +216,7 @@ module NATS
       if last > 0
         hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
       end
-      ack = @js.publish("#{@pre}#{key}", header: hdrs)
+      ack = @js.publish("#{@put_pre}#{key}", header: hdrs)
 
       ack.seq
     end
@@ -229,7 +232,7 @@ module NATS
       hdrs = {}
       hdrs[KV_OP] = KV_PURGE
       hdrs[ROLLUP] = MSG_ROLLUP_SUBJECT
-      @js.publish("#{@pre}#{key}", header: hdrs, ttl: params[:ttl])
+      @js.publish("#{@put_pre}#{key}", header: hdrs, ttl: params[:ttl])
     end
 
     # How old the delete and purge markers that purge_deletes removes have to
