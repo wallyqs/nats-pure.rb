@@ -262,6 +262,24 @@ module NATS
       # ErrConsumerMultipleFilterSubjectsNotSupported of nats.go.
       class ConsumerMultipleFilterSubjectsNotSupported < Error; end
 
+      # When the server answered the creation of a consumer without an
+      # error and without the info of the consumer, which then may or may
+      # not exist, like ErrConsumerCreationResponseEmpty of nats.go.
+      class ConsumerCreationResponseEmpty < Error
+        def initialize(msg = "nats: consumer creation response is empty")
+          super
+        end
+      end
+
+      # When the server answered the reset of a consumer without an error
+      # and without the info of the consumer, which then may or may not be
+      # reset, like ErrConsumerResetResponseEmpty of nats.go.
+      class ConsumerResetResponseEmpty < Error
+        def initialize(msg = "nats: consumer reset response is empty")
+          super
+        end
+      end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
