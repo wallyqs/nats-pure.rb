@@ -1224,7 +1224,10 @@ module NATS
       @status == CLOSED
     end
 
+    # Whether the connection is draining, like IsDraining of nats.go; false
+    # once the drain is over and the connection closed.
     def draining?
+      return false if closed?
       if (@status == DRAINING_PUBS) || (@status == DRAINING_SUBS)
         return true
       end

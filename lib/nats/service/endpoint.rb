@@ -146,8 +146,10 @@ module NATS
         @stopped = false
       end
 
+      # Drains the subscription of the endpoint, which closes once the
+      # requests that came were handled, like nats.go micro.
       def stop
-        service.client.send(:drain_sub, @handler)
+        @handler.drain
       rescue
         # nothing we can do here
       ensure

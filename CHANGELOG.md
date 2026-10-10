@@ -119,6 +119,7 @@
 
 ### Fixed
 
+- `nc.draining?` stayed `true` once a drained connection had closed; like `IsDraining` of nats.go, it is now `false` then, as is `Subscription#draining?` of a subscription that was draining when the connection closed. Services stopped their endpoint and monitoring subscriptions with a drain that never ended, so that `draining?` stayed `true`; like nats.go micro, they now drain them as `Subscription#drain` does, which closes them once the requests that came were handled.
 - Services: `request.respond` and the `$SRV` monitoring responses no longer echo the headers and the reply subject of the request, like `Respond` of nats.go micro. A monitoring request without a reply subject is ignored, instead of failing the service.
 - KV: the entries of `kv.get` have a `delta` of 0, like nats.go, rather than `nil`, also with direct gets.
 - KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
