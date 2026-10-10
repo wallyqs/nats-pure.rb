@@ -16,6 +16,12 @@ module NATS
     class MarshalResponseError < NATS::Service::Error
     end
 
+    class RespondError < NATS::Service::Error
+    end
+
+    class ArgRequiredError < NATS::Service::Error
+    end
+
     class NATSError < NATS::Service::Error
       attr_reader subject: String
       attr_reader description: String

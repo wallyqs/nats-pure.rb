@@ -31,8 +31,20 @@ module NATS
       # @param data [String] The response payload.
       # @param headers [Hash] Headers of the response, like WithHeaders
       #   of nats.go micro.
+      # @raise [NATS::Service::RespondError] When the response cannot be
+      #   sent, like ErrRespond of nats.go micro, with the error of the
+      #   client as its cause. The endpoint counts it as an error.
       def respond(data = "", headers: nil)
         respond_msg(response(data, headers))
+      end
+
+      # Sends msg as the response. A failure raises a RespondError, like
+      # ErrRespond of nats.go micro, whose cause is the error of the client.
+      def respond_msg(msg)
+        super
+      rescue NATS::Error => e
+        @error = RespondError.new("NATS error when sending response: #{e.message}")
+        raise @error
       end
 
       # Responds with obj as JSON, like RespondJSON of nats.go micro.
@@ -57,8 +69,17 @@ module NATS
       #   String is a 500, a Hash gives its :code, :description and :data.
       # @param headers [Hash] Headers of the response, added to the error
       #   headers, which they can override, like WithHeaders of nats.go micro.
+      # @raise [NATS::Service::ArgRequiredError] When the error has no code
+      #   or no description, like ErrArgRequired of nats.go micro. Nothing
+      #   is sent then.
+      # @raise [NATS::Service::RespondError] When the response cannot be
+      #   sent.
       def respond_with_error(error, headers: nil)
-        @error = NATS::Service::ErrorWrapper.new(error)
+        error = NATS::Service::ErrorWrapper.new(error)
+        raise ArgRequiredError, "argument required: error code" if error.code.to_s.empty?
+        raise ArgRequiredError, "argument required: description" if error.message.to_s.empty?
+
+        @error = error
 
         header = {
           ERROR_HEADER => @error.message,
@@ -188,9 +209,11 @@ module NATS
           req = Request.from_msg(self, msg)
           block.call(req)
           stats.error(req.error) if req.error
-        rescue NATS::Error => error
+        rescue NATS::Error, RespondError => error
           # Passed to the error handler of the service, which stops, and
-          # then to the client's error callback.
+          # then to the client's error callback. A response that could not
+          # be sent is such an error too, unless the handler rescued it, in
+          # which case it is only counted, like in nats.go micro.
           service.send(:report_error, error, subject, self)
           raise error
         rescue => error
