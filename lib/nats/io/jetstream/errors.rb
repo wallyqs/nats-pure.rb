@@ -119,6 +119,27 @@ module NATS
         end
       end
 
+      # When the server created or updated a stream without its subject
+      # transform, as servers before v2.10.0 do, like
+      # ErrStreamSubjectTransformNotSupported of nats.go.
+      class StreamSubjectTransformNotSupported < Error; end
+
+      # When the server created or updated a stream without the subject
+      # transforms of its sources, as servers before v2.10.0 do. nats.go
+      # returns ErrStreamSubjectTransformNotSupported, which this is a
+      # StreamSubjectTransformNotSupported like.
+      class StreamSourceSubjectTransformNotSupported < StreamSubjectTransformNotSupported; end
+
+      # When the server created or updated a stream without all of its
+      # sources, as servers before v2.2.0 do, like
+      # ErrStreamSourceNotSupported of nats.go.
+      class StreamSourceNotSupported < Error; end
+
+      # When the server created a consumer without its filter_subjects, as
+      # servers before v2.10.0 do, like
+      # ErrConsumerMultipleFilterSubjectsNotSupported of nats.go.
+      class ConsumerMultipleFilterSubjectsNotSupported < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
