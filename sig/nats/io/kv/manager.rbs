@@ -3,9 +3,27 @@ module NATS
     module Manager
       def key_value: (String) -> NATS::KeyValue
 
-      def create_key_value: (NATS::KeyValue::API::KeyValueConfig) -> NATS::KeyValue
+      def create_key_value: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> NATS::KeyValue
+
+      def update_key_value: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped]) -> NATS::KeyValue
+
+      def create_or_update_key_value: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped]) -> NATS::KeyValue
+
+      def key_value_store_names: () -> Array[String]
+
+      def key_value_stores: () -> Array[NATS::KeyValue::BucketStatus]
 
       def delete_key_value: (String) -> bool
+
+      private
+
+      def key_value_stream_config: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> NATS::JetStream::API::StreamConfig
+
+      def config_validate_keys: (NATS::KeyValue::API::KeyValueConfig | Hash[Symbol, untyped] | String) -> bool?
+
+      def key_value_for: (NATS::JetStream::API::StreamConfig, bool?) -> NATS::KeyValue
+
+      def kv_stream_pages: (String) -> Array[untyped]
     end
   end
 end
