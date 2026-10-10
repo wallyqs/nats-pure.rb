@@ -608,6 +608,12 @@ module NATS
       #   Whether messages can be published in fast batches
       #   (requires nats-server v2.14.0).
       #   @return [Boolean]
+      # @!attribute template_owner
+      #   Name of the stream template that manages the stream, like the
+      #   Template of nats.go. Deprecated: newer servers have no stream
+      #   templates (v2.12 still has them, v2.15.0 does not), and refuse a
+      #   config that sets it, as they do with nats.go.
+      #   @return [String, nil]
       StreamConfig = Struct.new(
         :name,
         :description,
@@ -647,6 +653,7 @@ module NATS
         :persist_mode,
         :allow_batched,
         :discard_new_per_subject,
+        :template_owner,
         keyword_init: true
       ) do
         def initialize(opts = {})
