@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- Headers: a header name that a message has more than once kept only its last value. Like the `http.Header` based headers of nats.go, received headers now give such a name an Array of its values, while names that come once keep a String; `publish`, `publish_msg`, `request` and `request_msg` take Array values, sending a line for each. This holds for core and JetStream messages, and for the headers of `jsm.get_msg`, also with `direct: true`.
 - `nc.connected?` was `false` while the connection drained. Like `IsConnected` of nats.go, it is now `true` until the drain closes the connection, as the connection still publishes and delivers messages; `draining?` tells the drain apart. As in nats.go, a connection that fails while draining still closes instead of reconnecting, and sends no keepalive PINGs.
 - `sub.next_msg` on a subscription with a callback raised `NoMethodError`. It now raises `NATS::IO::SyncSubRequired`, a `ClientError`, like `ErrSyncSubRequired` of nats.go.
 - A permissions violation, or a subscription refused as there are too many, made the client disconnect and reconnect, failing what was in flight, such as a `flush`, and on a server that requires auth it was an `AuthError` that also marked the server as one not to reconnect to. Like nats.go, the connection now stays up, and `on_error` gets a `NATS::IO::PermissionViolation` or `MaxSubscriptionsExceeded`, which are `ServerError`s. Connections refused as the server or account has too many are `ServerError`s too, and no longer mark the server.

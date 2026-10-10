@@ -15,8 +15,35 @@
 
 module NATS
   class Msg
+    # header is a Hash of the header names to their values, a String, or
+    # an Array of Strings for a name that the message has more than once,
+    # like the http.Header based headers of nats.go. Publishing takes both.
     attr_accessor :subject, :reply, :data, :header
     attr_accessor :nc, :sub
+
+    class << self
+      # @private
+      # Adds a value of a header that was received: a name that comes
+      # again gets an Array of its values, others keep a String.
+      def add_header_value(hdr, key, value)
+        hdr[key] = if !hdr.key?(key)
+          value
+        elsif hdr[key].is_a?(Array)
+          hdr[key] + [value]
+        else
+          [hdr[key], value]
+        end
+      end
+
+      # @private
+      # The "Name: value" lines of a header, one for each value of a name
+      # that has an Array of them.
+      def header_lines(header)
+        header.flat_map do |key, value|
+          (value.is_a?(Array) ? value : [value]).map { |v| "#{key}: #{v}\r\n" }
+        end
+      end
+    end
 
     def initialize(opts = {})
       @subject = opts[:subject]
