@@ -15,6 +15,7 @@
 #
 require_relative "kv"
 require_relative "jetstream/api"
+require_relative "jetstream/batch_publisher"
 require_relative "jetstream/consume"
 require_relative "jetstream/errors"
 require_relative "jetstream/header"

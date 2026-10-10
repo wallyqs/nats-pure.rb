@@ -1,0 +1,44 @@
+module NATS
+  class JetStream
+    class BatchAck < Struct[String | Integer]
+      attr_accessor stream: String
+      attr_accessor seq: Integer
+      attr_accessor domain: String?
+      attr_accessor val: String?
+      attr_accessor batch: String
+      attr_accessor count: Integer
+
+      def initialize: (?Hash[Symbol, untyped]) -> void
+    end
+
+    class BatchPublisher
+      include MonitorMixin
+
+      BATCH_COMMIT_EOB: String
+
+      attr_reader id: String
+
+      def initialize: (NATS::JetStream js, ?ack_first: bool, ?ack_every: Integer, ?ack_timeout: Numeric?) -> void
+
+      def add: (String subject, ?String data, ?header: Hash[String, untyped]?, **untyped) -> nil
+
+      def add_msg: (NATS::Msg msg, **untyped) -> nil
+
+      def commit: (String subject, ?String data, ?header: Hash[String, untyped]?, ?timeout: Numeric?, **untyped) -> NATS::JetStream::BatchAck
+
+      def commit_msg: (NATS::Msg msg, ?timeout: Numeric?, **untyped) -> NATS::JetStream::BatchAck
+
+      def close: (?timeout: Numeric?) -> NATS::JetStream::BatchAck
+
+      def discard: () -> nil
+
+      def size: () -> Integer
+
+      def closed?: () -> bool
+    end
+
+    def new_batch_publisher: (**untyped) -> NATS::JetStream::BatchPublisher
+
+    def publish_msg_batch: (Array[NATS::Msg] messages, ?timeout: Numeric?, **untyped) -> NATS::JetStream::BatchAck
+  end
+end

@@ -142,6 +142,21 @@ js.publish("reminders.cancelled", "", header: {
 })
 ```
 
+Messages can be published as an atomic batch, which the stream stores all
+at once on commit, or not at all (nats-server 2.12; `close` needs 2.14):
+
+```ruby
+js.add_stream(name: "orders", subjects: ["orders.>"], allow_atomic: true)
+
+batch = js.new_batch_publisher
+batch.add("orders.1", "one")
+batch.add("orders.2", "two", expected_last_subject_seq: 0)
+ack = batch.commit("orders.3", "three") # or batch.close, or batch.discard
+ack.count # => 3
+
+js.publish_msg_batch([NATS::Msg.new(subject: "orders.4"), NATS::Msg.new(subject: "orders.5")])
+```
+
 Streams and consumers can also be managed directly:
 
 ```ruby
