@@ -138,13 +138,10 @@ module NATS
 
       begin
         resp = @nc.request_msg(msg, **params)
-        result = JSON.parse(resp.data, symbolize_names: true)
       rescue ::NATS::IO::NoRespondersError
         raise JetStream::Error::NoStreamResponse.new("nats: no response from stream")
       end
-      raise JS.from_error(result[:error]) if result[:error]
-
-      PubAck.new(result)
+      pub_ack(resp)
     end
 
     # subscribe binds or creates a push subscription to a JetStream pull consumer.
@@ -225,7 +222,9 @@ module NATS
       end
 
       if consumer_found
-        if !config.deliver_group
+        if config.deliver_subject.to_s.empty?
+          raise NATS::JetStream::Error::NotPushConsumer.new("nats: consumer is not a push consumer")
+        elsif !config.deliver_group
           if queue
             raise NATS::JetStream::Error.new("nats: cannot create a queue subscription for a consumer without a deliver group")
           elsif cinfo.push_bound
@@ -343,7 +342,10 @@ module NATS
         params[:stream]
       end
       begin
-        consumer_info(stream, params[:consumer])
+        cinfo = consumer_info(stream, params[:consumer])
+        unless cinfo.config.deliver_subject.to_s.empty?
+          raise JetStream::Error::NotPullConsumer.new("nats: consumer is not a pull consumer")
+        end
       rescue NATS::JetStream::Error::NotFound => e
         # If attempting to bind, then this is a hard error.
         raise e if params[:stream] && !multi_filter
@@ -381,6 +383,21 @@ module NATS
     end
 
     private
+
+    # pub_ack takes the PubAck from the response to a publish, raising the
+    # error that the stream responded with instead.
+    def pub_ack(resp)
+      result = begin
+        JSON.parse(resp.data, symbolize_names: true)
+      rescue JSON::ParserError
+        nil
+      end
+      raise JetStream::Error::InvalidJSAck.new("nats: invalid jetstream publish response") unless result.is_a?(Hash)
+      raise JS.from_error(result[:error]) if result[:error]
+      raise JetStream::Error::InvalidJSAck.new("nats: invalid jetstream publish response") if result[:stream].to_s.empty?
+
+      PubAck.new(result)
+    end
 
     # msg_ttl formats a message TTL as the server takes it. Longer TTLs than
     # 2**32 seconds, some 136 years, overflow in the server, which then

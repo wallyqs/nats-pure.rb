@@ -18,6 +18,8 @@ module NATS
 
         def ensure_is_acked_once!: () -> void
 
+        def check_reply!: () -> void
+
         def parse_metadata: (String) -> NATS::JetStream::Msg::Metadata
       end
     end

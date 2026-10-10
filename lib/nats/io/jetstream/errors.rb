@@ -24,7 +24,8 @@ module NATS
       # When an invalid durable or consumer name was attempted to be used.
       class InvalidDurableName < Error; end
 
-      # When an ack not longer valid.
+      # When the response to a publish is not an ack of JetStream: not a
+      # JSON object, or one without the stream.
       class InvalidJSAck < Error; end
 
       # When an ack has already been acked.
@@ -42,6 +43,24 @@ module NATS
 
       # When the server does not confirm that it deleted a message.
       class MsgDeleteUnsuccessful < Error; end
+
+      # When a pull subscription is bound to a push consumer, one with a
+      # deliver subject.
+      class NotPullConsumer < Error; end
+
+      # When a push subscription is bound to a pull consumer, one without a
+      # deliver subject.
+      class NotPushConsumer < Error; end
+
+      # When a message to be acked is not bound to a subscription, as it was
+      # not delivered by one.
+      class MsgNotBound < Error; end
+
+      # When a message to be acked has no reply subject to send the ack to.
+      class MsgNoReply < Error; end
+
+      # When the response of the JetStream API is not a JSON object.
+      class InvalidJetStreamResponse < Error; end
 
       # When the server responds with an error from the JetStream API.
       class APIError < Error
@@ -96,6 +115,9 @@ module NATS
         end
       end
 
+      # When the stream does not have the message.
+      class MsgNotFound < NotFound; end
+
       # When the stream is not found.
       class StreamNotFound < NotFound
         def initialize(params = {})
@@ -119,6 +141,55 @@ module NATS
         end
       end
 
+      # When a stream is created with the name of a stream that has a
+      # different configuration.
+      class StreamNameAlreadyInUse < BadRequest; end
+
+      # When a consumer is created with the name of a consumer that has a
+      # different configuration, or with the API of servers before v2.10.0.
+      class ConsumerNameAlreadyInUse < BadRequest; end
+
+      # When a stream, or the account, has as many consumers as it may.
+      class MaximumConsumersLimit < BadRequest; end
+
+      # When a consumer config has both filter_subject and filter_subjects.
+      class DuplicateFilterSubjects < BadRequest; end
+
+      # When the filter_subjects of a consumer config overlap.
+      class OverlappingFilterSubjects < BadRequest; end
+
+      # When the filter_subjects of a consumer config have an empty subject.
+      class EmptyFilter < BadRequest; end
+
+      # When a publish expects another last sequence of the stream, or of the
+      # subject, than the stream has.
+      class WrongLastSequence < BadRequest; end
+
+      # When a message schedule is published to a stream without
+      # allow_msg_schedules.
+      class MessageSchedulesDisabled < BadRequest; end
+
+      # When the pattern of a message schedule is invalid.
+      class SchedulePatternInvalid < BadRequest; end
+
+      # When the target of a message schedule is invalid.
+      class ScheduleTargetInvalid < BadRequest; end
+
+      # When the TTL of a message schedule is invalid.
+      class ScheduleTTLInvalid < BadRequest; end
+
+      # When the rollup of a message schedule is invalid.
+      class ScheduleRollupInvalid < BadRequest; end
+
+      # When the source of a message schedule is invalid.
+      class ScheduleSourceInvalid < BadRequest; end
+
+      # When a mirror is configured to allow message schedules.
+      class MirrorWithMsgSchedules < BadRequest; end
+
+      # When a stream with sources is configured to allow message schedules.
+      class SourceWithMsgSchedules < BadRequest; end
+
       # When create_consumer finds the consumer already exists with a
       # different configuration.
       class ConsumerAlreadyExists < BadRequest; end
@@ -131,6 +202,28 @@ module NATS
       # reset to: one before its start, or any for a consumer that does
       # not deliver all messages or from a start sequence or time.
       class ConsumerInvalidReset < BadRequest; end
+
+      # When the server could not create a consumer.
+      class ConsumerCreate < ServerError; end
+
+      # When JetStream is not enabled on the server.
+      class JetStreamNotEnabled < ServiceUnavailable; end
+
+      # When JetStream is not enabled for the account.
+      class JetStreamNotEnabledForAccount < ServiceUnavailable; end
+
+      # When the consumer of a pull was deleted.
+      # This condition is represented with a message that has 409 status code header.
+      class ConsumerDeleted < APIError; end
+
+      # When the consumer of a pull got another leader, which does not
+      # have the pull.
+      # This condition is represented with a message that has 409 status code header.
+      class ConsumerLeadershipChanged < APIError; end
+
+      # When the server of a pull shut down.
+      # This condition is represented with a message that has 409 status code header.
+      class ServerShutdown < APIError; end
 
       # When a fetch from a consumer with the pinned_client priority policy
       # finds the subscription no longer pinned, as its pin expired or it

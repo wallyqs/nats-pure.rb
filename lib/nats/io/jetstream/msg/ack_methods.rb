@@ -78,6 +78,7 @@ module NATS
         end
 
         def in_progress(**params)
+          check_reply!
           params[:timeout] ? @nc.request(@reply, Ack::Progress, **params) : @nc.publish(@reply, Ack::Progress)
         end
 
@@ -88,11 +89,19 @@ module NATS
         private
 
         def ensure_is_acked_once!
+          check_reply!
           @sub.synchronize do
             if @ackd
               raise JetStream::Error::MsgAlreadyAckd.new("nats: message was already acknowledged: #{self}")
             end
           end
+        end
+
+        # check_reply! makes sure that the message can be acked, as nats.go
+        # does: delivered by a subscription, with a reply to ack to.
+        def check_reply!
+          raise JetStream::Error::MsgNotBound.new("nats: message is not bound to subscription/connection") if @sub.nil? || @nc.nil?
+          raise JetStream::Error::MsgNoReply.new("nats: message does not have a reply") if @reply.to_s.empty?
         end
 
         def parse_metadata(reply)

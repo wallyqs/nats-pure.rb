@@ -24,6 +24,7 @@ module NATS
         NoMsgs = "404"
         NotFound = "404"
         RequestTimeout = "408"
+        Conflict = "409"
         PinIdMismatch = "423"
         ServiceUnavailable = "503"
 
