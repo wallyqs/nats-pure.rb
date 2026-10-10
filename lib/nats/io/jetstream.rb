@@ -83,6 +83,11 @@ module NATS
     # @option params [Proc] :publish_async_err_handler Called with the
     #   message and the error of each publish_async that fails, like
     #   PublishAsyncErrHandler of nats.go.
+    # @option params [Proc] :publish_async_ack_handler Called with the
+    #   message and the PubAck of each publish_async that the stream acks,
+    #   once its future has the ack, like WithPublishAsyncAckHandler of
+    #   nats.go. It runs on the thread that takes the acks, so it should not
+    #   block.
     # @option params [Hash] :client_trace Callbacks that trace the requests
     #   to the JetStream API, like WithClientTrace of nats.go:
     #   :request_sent is called with the subject and the payload of each
@@ -740,9 +745,14 @@ module NATS
       unless err_handler.nil? || err_handler.respond_to?(:call)
         raise ArgumentError.new("nats: invalid publish_async_err_handler #{err_handler.inspect}, expected a callable")
       end
+      ack_handler = @opts[:publish_async_ack_handler]
+      unless ack_handler.nil? || ack_handler.respond_to?(:call)
+        raise ArgumentError.new("nats: invalid publish_async_ack_handler #{ack_handler.inspect}, expected a callable")
+      end
 
       @async_max_pending = max_pending
       @async_err_handler = err_handler
+      @async_ack_handler = ack_handler
       @async_mon = Monitor.new
       @async_stall = @async_mon.new_cond
       @async_done = @async_mon.new_cond
@@ -823,11 +833,16 @@ module NATS
     end
 
     # resolve_async_future ends the publish of a future, calling the error
-    # handler when it failed. It is called without holding the lock.
+    # handler when it failed, and the ack handler when it was acked. It is
+    # called without holding the lock.
     def resolve_async_future(future, ack: nil, err: nil)
       return unless future.resolve(ack: ack, err: err)
 
-      @async_err_handler&.call(future.msg, err) if err
+      if err
+        @async_err_handler&.call(future.msg, err)
+      elsif ack
+        @async_ack_handler&.call(future.msg, ack)
+      end
     rescue => e
       # An error of the handler goes to the error callback of the connection.
       @nc.send(:err_cb_call, @nc, e, nil)
