@@ -264,6 +264,17 @@ NATS.connect('tls://127.0.0.1:4444', tls_handshake_first: true, tls: {
 })
 ```
 
+To load the certificate or the CAs from elsewhere, or anew on each
+(re)connect, as when they get rotated, `cert_cb:` and `ca_cb:` take callbacks,
+like `ClientTLSConfig` of nats.go:
+
+```ruby
+NATS.connect('tls://127.0.0.1:4444', tls: {
+  cert_cb: -> { [OpenSSL::X509::Certificate.new(cert_pem), OpenSSL::PKey.read(key_pem)] },
+  ca_cb: -> { OpenSSL::X509::Store.new.tap { |store| store.add_file('./ca.pem') } }
+})
+```
+
 ## WebSocket
 
 Since NATS Server v2.2 it is possible to connect to a NATS server [using WebSocket](https://docs.nats.io/running-a-nats-service/configuration/websocket).

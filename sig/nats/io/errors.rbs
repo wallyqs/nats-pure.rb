@@ -42,6 +42,9 @@ module NATS
     class InvalidMsg < TypeError
     end
 
+    class ClientCertOrRootCAsRequired < ArgumentError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 

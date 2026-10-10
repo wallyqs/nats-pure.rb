@@ -79,6 +79,10 @@ module NATS
     # ErrInvalidMsg of nats.go. A TypeError, as it was.
     class InvalidMsg < TypeError; end
 
+    # When the tls option names cert_cb or ca_cb but sets neither, like
+    # ErrClientCertOrRootCAsRequired of nats.go.
+    class ClientCertOrRootCAsRequired < ArgumentError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 

@@ -284,6 +284,10 @@ module NATS
 
     def client_using_secure_connection?: () -> bool
 
+    def tls_context: () -> OpenSSL::SSL::SSLContext?
+
+    def new_tls_context: () -> OpenSSL::SSL::SSLContext
+
     def single_url_connect_used?: () -> bool
 
     def check_max_payload!: (Integer) -> void
