@@ -56,6 +56,19 @@ module NATS
 
         [API_PREFIX, verb_str, name, id].compact.join(".")
       end
+
+      # Resolves the queue group of a service, group or endpoint from its
+      # options and its parent, like resolveQueueGroup of nats.go micro:
+      # returns the queue group, "" when it is disabled, and whether it is
+      # disabled. A queue of "" disables it too, as it always did.
+      # @api private
+      def resolve_queue_group(queue, disabled, parent_queue, parent_disabled)
+        return ["", true] if disabled || queue == ""
+        return [queue, false] if queue
+        return ["", true] if parent_disabled
+
+        [parent_queue, false]
+      end
     end
 
     attr_reader :client, :name, :id, :version, :description, :metadata, :queue
@@ -94,6 +107,13 @@ module NATS
 
     def stopped?
       !!@stopped
+    end
+
+    # Whether the endpoints of the service, unless their groups or they
+    # say otherwise, subscribe without a queue group, like
+    # QueueGroupDisabled of nats.go micro.
+    def queue_group_disabled?
+      @queue_group_disabled
     end
 
     def stop(error = nil)
@@ -140,7 +160,9 @@ module NATS
       @version = options[:version]
       @description = options[:description]
       @metadata = options[:metadata].freeze
-      @queue = options[:queue] || DEFAULT_QUEUE
+      @queue, @queue_group_disabled = Service.resolve_queue_group(
+        options[:queue], options[:queue_group_disabled], DEFAULT_QUEUE, false
+      )
       @error_handler = options[:error_handler]
     end
 
@@ -220,7 +242,9 @@ module NATS
     #   )
     #
     # @param options [Hash] The options of the service: :name, :version,
-    #   :description, :metadata, :queue, :error_handler and :endpoint, an
+    #   :description, :metadata, :queue, :queue_group_disabled (true to
+    #   subscribe without a queue group, like QueueGroupDisabled of nats.go
+    #   micro), :error_handler and :endpoint, an
     #   endpoint added when the service is created, like Config.Endpoint of
     #   nats.go micro. The endpoint is named "default" and takes the
     #   options of an endpoint (:subject, :metadata, :queue) and its

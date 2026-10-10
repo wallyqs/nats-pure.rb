@@ -1,0 +1,11 @@
+module NATS
+  class Service
+    class Group
+      def queue_group_disabled?: () -> bool
+    end
+
+    class Groups
+      def add: (String name, ?queue: String?, ?queue_group_disabled: bool) -> NATS::Service::Group
+    end
+  end
+end

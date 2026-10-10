@@ -10,6 +10,8 @@ module NATS
 
     class Endpoint
       def subscription: () -> NATS::Subscription
+
+      def queue_group_disabled?: () -> bool
     end
   end
 end

@@ -7,6 +7,8 @@ module NATS
 
     def self.control_subject: (Symbol | String verb, ?String? name, ?String? id) -> String
 
+    def queue_group_disabled?: () -> bool
+
     def initialize: (NATS::Client client, Hash[Symbol, untyped] options) ?{ (NATS::Service::Request) -> void } -> void
 
     def on_error: () { (NATS::Service, NATS::Service::NATSError) -> void } -> void
