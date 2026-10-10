@@ -245,17 +245,24 @@ module NATS
       def key_value_for(stream_config, validate_keys)
         bucket = stream_config.name.delete_prefix("KV_")
         pre = "$KV.#{bucket}."
-        put_pre = nil
+        # Like nats.go, the writes go through the API prefix of the context
+        # unless it is the default $JS.API: one for a domain, which the server
+        # maps to the subjects of the buckets ($JS.<domain>.API.$KV.> to
+        # $KV.>), or one under which another account imports JetStream and
+        # the subjects of its buckets.
+        js_pre = (@prefix == "$JS.API") ? "" : "#{@prefix.chomp(".")}."
+        put_pre = js_pre.empty? ? nil : "#{js_pre}#{pre}"
         if (mirror = stream_config.mirror)
           # A mirror holds the keys of its origin, to which the writes go, as
           # in nats.go. The writes to a bucket of another domain go through
-          # the API prefix of that domain. Unlike nats.go, which looks up the
-          # keys of a mirror in the same domain under the mirror's name, and
-          # so does not find them, the reads take the origin's name too.
+          # the API prefix of that domain instead. Unlike nats.go, which looks
+          # up the keys of a mirror in the same domain under the mirror's
+          # name, and so does not find them, the reads take the origin's name
+          # too.
           origin = mirror[:name].delete_prefix("KV_")
           pre = "$KV.#{origin}."
           api = mirror.dig(:external, :api)
-          put_pre = (api.nil? || api.empty?) ? pre : "#{api}.#{pre}"
+          put_pre = (api.nil? || api.empty?) ? "#{js_pre}#{pre}" : "#{api}.#{pre}"
         end
         KeyValue.new(
           name: bucket,
