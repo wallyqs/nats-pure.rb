@@ -15,7 +15,9 @@ describe "Client - Reconnect" do
     nats.connect({
       reconnect: true,
       reconnect_time_wait: 0.2,
-      max_reconnect_attempts: 1
+      max_reconnect_attempts: 1,
+      # The client leaves the invalid subject below to the server.
+      skip_subject_validation: true
     })
 
     errors = []

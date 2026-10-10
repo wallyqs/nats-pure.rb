@@ -12,7 +12,8 @@ describe "Client - Errors" do
 
   it "should process errors from server" do
     nats = NATS::IO::Client.new
-    nats.connect(reconnect: false)
+    # The client leaves the invalid subject below to the server.
+    nats.connect(reconnect: false, skip_subject_validation: true)
 
     errors = []
     nats.on_error do |e|

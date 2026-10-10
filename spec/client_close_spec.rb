@@ -33,7 +33,8 @@ describe "Client#close" do
   # narrower (2/20 on 4.0.7 Linux, 0/20 on 4.0.6 macOS).
   it "returns while the read loop is handling a server error" do
     20.times do |i|
-      nc = NATS.connect(@s.uri)
+      # The client leaves the invalid subject to the server, whose -ERR is the point.
+      nc = NATS.connect(@s.uri, skip_subject_validation: true)
       nc.subscribe("invalid.")
 
       closer = Thread.new { nc.close }
@@ -90,7 +91,7 @@ describe "Client#close" do
 
     it "does not reconnect after close" do
       20.times do |i|
-        nc = NATS.connect(@s.uri, reconnect_time_wait: 0.01)
+        nc = NATS.connect(@s.uri, reconnect_time_wait: 0.01, skip_subject_validation: true)
         # The -ERR starts a reconnect; close while it is under way.
         nc.subscribe("invalid.")
         wait_until(description: "the reconnect to start") { nc.reconnecting? || nc.stats[:reconnects] > 0 }
@@ -104,7 +105,7 @@ describe "Client#close" do
 
     it "completes a close started by the read loop itself" do
       closes = 0
-      nc = NATS.connect(@s.uri, reconnect: false)
+      nc = NATS.connect(@s.uri, reconnect: false, skip_subject_validation: true)
       nc.on_close { closes += 1 }
 
       # Without reconnecting, the -ERR makes the read loop call close.
