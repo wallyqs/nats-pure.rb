@@ -21,14 +21,14 @@ module NATS
       class PriorityGroupState < Struct[String | Time]
       end
 
-      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time | bool | Array[NATS::JetStream::API::PriorityGroupState]]
+      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Float | Hash[Symbol, untyped] | Time | bool | Array[NATS::JetStream::API::PriorityGroupState]]
       end
 
       class ConsumerConfig < Struct[String | Integer | Float | Time | Array[String]]
         def to_json: (*Hash[untyped, untyped]) -> String
       end
 
-      class ConsumerPauseResponse < Struct[bool | Time | Integer]
+      class ConsumerPauseResponse < Struct[bool | Time | Integer | Float]
       end
 
       class ConsumerResetResponse < Struct[NATS::JetStream::API::ConsumerInfo | Integer]
