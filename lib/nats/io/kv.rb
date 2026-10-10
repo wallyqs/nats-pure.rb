@@ -110,6 +110,12 @@ module NATS
       @validate_keys = opts[:validate_keys]
     end
 
+    # bucket returns the name of the bucket, like Bucket of nats.go.
+    # @return [String]
+    def bucket
+      @name
+    end
+
     # get returns the latest value for the key, as an Entry with the
     # revision, the time it was stored (created) and the KV_PUT operation.
     # @param params [Hash] Options of the get.

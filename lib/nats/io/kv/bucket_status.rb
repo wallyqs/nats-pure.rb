@@ -28,6 +28,19 @@ module NATS
         @stream_info.state.messages
       end
 
+      # The bytes that the bucket's stream holds, like Bytes of nats.go.
+      # @return [Integer]
+      def bytes
+        @stream_info.state.bytes
+      end
+
+      # What the bucket is stored in, "JetStream", like BackingStore of
+      # nats.go.
+      # @return [String]
+      def backing_store
+        "JetStream"
+      end
+
       def history
         @stream_info.config.max_msgs_per_subject
       end
@@ -52,6 +65,32 @@ module NATS
       # (requires nats-server v2.10.0).
       def metadata
         @stream_info.config.metadata
+      end
+
+      # The configuration of the bucket, rebuilt from that of its stream,
+      # like Config of nats.go. As for create_key_value, ttl and
+      # limit_marker_ttl are in seconds, 0 when not set.
+      # @return [KeyValue::API::KeyValueConfig]
+      def config
+        config = @stream_info.config
+        KeyValue::API::KeyValueConfig.new(
+          bucket: @bucket,
+          description: config.description,
+          max_value_size: config.max_msg_size,
+          history: config.max_msgs_per_subject,
+          ttl: ttl,
+          max_bytes: config.max_bytes,
+          storage: config.storage,
+          replicas: config.num_replicas,
+          placement: config.placement,
+          republish: config.republish,
+          direct: config.allow_direct,
+          compression: compressed?,
+          metadata: config.metadata,
+          limit_marker_ttl: limit_marker_ttl,
+          mirror: config.mirror,
+          sources: config.sources
+        )
       end
     end
   end
