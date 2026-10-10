@@ -33,6 +33,14 @@ module NATS
   #   js = nc.jetstream()
   #
   class JetStream
+    # How many times publish retries a message that no stream responded to,
+    # like DefaultPubRetryAttempts of nats.go.
+    DEFAULT_PUB_RETRY_ATTEMPTS = 2
+
+    # How long, in seconds, publish waits before it retries a message that no
+    # stream responded to, like DefaultPubRetryWait of nats.go.
+    DEFAULT_PUB_RETRY_WAIT = 0.25
+
     attr_reader :opts, :prefix, :nc
 
     # Create a new JetStream context for a NATS connection.
@@ -42,6 +50,8 @@ module NATS
     # @option params [String] :prefix JetStream API prefix to use for the requests.
     # @option params [String] :domain JetStream Domain to use for the requests.
     # @option params [Float] :timeout Default timeout to use for JS requests.
+    # @option params [Integer] :retry_attempts Default retry_attempts of publish, 2 unless given.
+    # @option params [Float] :retry_wait Default retry_wait of publish, in seconds, 0.25 unless given.
     def initialize(conn, params = {})
       @nc = conn
       @prefix = if params[:prefix]
@@ -90,6 +100,13 @@ module NATS
     # @param payload [String] The payload of the message.
     # @param params [Hash] Options to customize the publish message request.
     # @option params [Float] :timeout Time to wait for an PubAck response or an error.
+    # @option params [Integer] :retry_attempts How many times to send the
+    #   message again when no stream responds, as when the stream is
+    #   electing a leader, like RetryAttempts of nats.go: 2 by default, and
+    #   for as long as the timeout allows when negative.
+    # @option params [Float] :retry_wait Seconds to wait before each retry,
+    #   like RetryWait of nats.go: 0.25 by default. A retry whose wait would
+    #   not end before the timeout is not made.
     # @option params [Hash] :header NATS Headers to use for the message; the
     #   options below replace those that they set.
     # @option params [String] :stream Expected Stream to which the message is being published.
@@ -115,10 +132,11 @@ module NATS
     # @raise [NATS::JetStream::Error::APIError] When the stream refuses the
     #   message, as a stream that does not allow TTLs refuses one with a TTL.
     # @raise [NATS::JetStream::Error::NoStreamResponse] When no stream takes
-    #   the subject.
+    #   the subject, after the retries.
     # @return [PubAck] The pub ack response.
     def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
+      retry_attempts, retry_wait = pub_retry(params)
       # The options add to a copy of the header, which the caller may reuse.
       options = {
         Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
@@ -136,12 +154,7 @@ module NATS
         data: payload,
         header: header)
 
-      begin
-        resp = @nc.request_msg(msg, **params)
-      rescue ::NATS::IO::NoRespondersError
-        raise JetStream::Error::NoStreamResponse.new("nats: no response from stream")
-      end
-      pub_ack(resp)
+      pub_ack(request_with_retry(msg, params[:timeout], retry_attempts, retry_wait))
     end
 
     # subscribe binds or creates a push subscription to a JetStream pull consumer.
@@ -383,6 +396,37 @@ module NATS
     end
 
     private
+
+    # pub_retry takes the retry options of a publish, which default to those
+    # of the context.
+    def pub_retry(params)
+      attempts = params.fetch(:retry_attempts) { @opts.fetch(:retry_attempts, DEFAULT_PUB_RETRY_ATTEMPTS) }
+      wait = params.fetch(:retry_wait) { @opts.fetch(:retry_wait, DEFAULT_PUB_RETRY_WAIT) }
+      raise ArgumentError.new("nats: invalid retry_attempts #{attempts.inspect}, expected an Integer") unless attempts.is_a?(Integer)
+      unless wait.is_a?(Numeric) && wait >= 0 && wait.finite?
+        raise ArgumentError.new("nats: invalid retry_wait #{wait.inspect}, expected seconds of 0 or more")
+      end
+
+      [attempts, wait]
+    end
+
+    # request_with_retry sends the message of a publish, and sends it again
+    # when no stream responds, as nats.go does, as long as the retry would
+    # start before the timeout is up, which all of the attempts share.
+    def request_with_retry(msg, timeout, attempts, wait)
+      deadline = MonotonicTime.now + timeout
+      retries = 0
+      begin
+        @nc.request_msg(msg, timeout: deadline - MonotonicTime.now)
+      rescue ::NATS::IO::NoRespondersError
+        if (attempts < 0 || retries < attempts) && MonotonicTime.now + wait < deadline
+          retries += 1
+          sleep(wait)
+          retry
+        end
+        raise JetStream::Error::NoStreamResponse.new("nats: no response from stream")
+      end
+    end
 
     # pub_ack takes the PubAck from the response to a publish, raising the
     # error that the stream responded with instead.
