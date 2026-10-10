@@ -343,24 +343,55 @@ module NATS
       watch(ALL_KEYS, params)
     end
 
-    # keys returns the keys from a KeyValue store.
-    # Optionally filters the keys based on the provided filter list.
-    def keys(params = {})
-      params[:ignore_deletes] = true
-      params[:meta_only] = true
+    # keys returns the keys of the bucket, like Keys of nats.go, as an
+    # Enumerator that goes through them once, or yields each to a block.
+    # It raises NoKeysFoundError when there are none, as Keys does. The
+    # watcher that it lists them with stops once they are listed, or when
+    # the iteration is left early, as with break or take; list_keys gives a
+    # lister that can also be stopped from elsewhere.
+    # @param params [Hash, Array<String>, String] Options of the watch, or
+    #   the filters of the keys to list (requires nats-server v2.10.0 for
+    #   more than one), which a Hash takes as :filters.
+    # @return [Enumerator<String>]
+    # @raise [NoKeysFoundError] When there are no keys.
+    def keys(params = {}, &block)
+      params = {filters: params} unless params.is_a?(Hash)
+      params = params.dup
+      filters = params.delete(:filters)
+      lister = filters ? list_keys_filtered(*filters, **params) : list_keys(params)
 
-      w = watchall(params)
-      got_keys = false
-
-      Enumerator.new do |y|
-        w.each do |entry|
-          break if entry.nil?
+      enum = Enumerator.new do |y|
+        got_keys = false
+        lister.each do |key|
           got_keys = true
-          y << entry.key
+          y << key
         end
-        w.stop
         raise NoKeysFoundError unless got_keys
       end
+      return enum unless block
+
+      enum.each(&block)
+    end
+
+    # list_keys returns a lister of the keys of the bucket, like ListKeys of
+    # nats.go. Unlike keys, it lists no keys, rather than raising, when the
+    # bucket has none.
+    # @param params [Hash] Options of the watch, such as :resume_from_revision.
+    # @return [KeyLister]
+    def list_keys(params = {})
+      params = params.merge(ignore_deletes: true, meta_only: true)
+      KeyLister.new(watchall(params))
+    end
+
+    # list_keys_filtered returns a lister of the keys of the bucket that
+    # match any of the filters, like ListKeysFiltered of nats.go. Without
+    # filters, it lists all keys. More than one filter requires nats-server
+    # v2.10.0.
+    # @param filters [Array<String>] Patterns of the keys, such as "a.*".
+    # @return [KeyLister]
+    def list_keys_filtered(*filters, **params)
+      params = params.merge(ignore_deletes: true, meta_only: true)
+      KeyLister.new(watch(filters.flatten, params))
     end
 
     # history retrieves the entries so far for a key.
@@ -621,6 +652,67 @@ module NATS
       watcher._hb_task.execute
 
       watcher
+    end
+  end
+
+  # KeyLister lists the keys of a bucket, like KeyLister of nats.go: each
+  # yields them once, after which, or when left early, the lister stops
+  # its watcher. stop stops it from anywhere, ending the listing.
+  class KeyLister
+    include Enumerable
+
+    def initialize(watcher)
+      @watcher = watcher
+      @updates = watcher._updates
+      @mon = Monitor.new
+      @stopped = false
+    end
+
+    # each yields the keys, like Keys of nats.go, until they are all
+    # listed or the lister is stopped.
+    # @yieldparam key [String]
+    def each
+      return enum_for(:each) unless block_given?
+
+      begin
+        until stopped?
+          entry = @updates.pop
+          # The nil update marks the end of the keys.
+          break if entry.nil? || stopped?
+          yield entry.key
+        end
+      ensure
+        stop
+      end
+      self
+    end
+    alias_method :keys, :each
+
+    # stop stops the watcher of the lister, like Stop of nats.go. A listing
+    # under way ends.
+    def stop
+      @mon.synchronize do
+        return if @stopped
+        @stopped = true
+      end
+      @watcher.stop
+      # The entries that the watcher still gets go to a queue that never
+      # fills, rather than block their subscription. Clearing the lister's
+      # queue wakes an entry waiting for room in it, and the nil a listing
+      # that waits for keys.
+      @watcher._updates = Thread::Queue.new
+      @updates.clear
+      begin
+        @updates.push(nil, true)
+      rescue ThreadError
+        # A full queue wakes it anyway.
+      end
+      nil
+    end
+
+    # Whether the lister is stopped, which it is once the keys are listed.
+    def stopped?
+      @mon.synchronize { @stopped }
     end
   end
 
