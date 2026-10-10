@@ -136,6 +136,8 @@ module NATS
 
     def rtt: () -> Float
 
+    def barrier: () { () -> void } -> void
+
     alias servers server_pool
 
     def discovered_servers: () -> Array[String]

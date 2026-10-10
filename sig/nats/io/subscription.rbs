@@ -29,5 +29,18 @@ module NATS
     def unsubscribe: (?Integer?) -> void
 
     def next_msg: (Hash[Symbol, untyped]?) -> NATS::Msg
+
+    private
+
+    @enqueued: Integer
+    @dequeued: Integer
+    @processing: Hash[Integer, bool]
+    @barriers: Array[[Integer, untyped]]
+
+    def add_barrier: (untyped) -> void
+
+    def processed: (Integer) -> void
+
+    def passed_barriers: () -> Array[untyped]
   end
 end
