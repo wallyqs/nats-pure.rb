@@ -252,6 +252,8 @@ module NATS
 
     def process_msg: (String, String, String, String, String) -> void
 
+    def received_msg: (String, String?, String, String?, Hash[String, untyped]?, NATS::Subscription) -> NATS::Msg
+
     def select_next_error: () -> untyped
 
     def server_using_secure_connection?: () -> bool
