@@ -489,6 +489,21 @@ module NATS
         end
       end
 
+      # StreamPurgeResponse is the response from the JetStream $JS.API.STREAM.PURGE API.
+      #
+      # @!attribute success
+      #   @return [Boolean]
+      # @!attribute purged
+      #   @return [Integer] The number of messages purged.
+      StreamPurgeResponse = Struct.new(:success, :purged, keyword_init: true) do
+        def initialize(opts = {})
+          rem = opts.keys - members
+          opts.delete_if { |k| rem.include?(k) }
+          super
+          freeze
+        end
+      end
+
       RawStreamMsg = Struct.new(:subject, :seq, :data, :headers, keyword_init: true) do
         def initialize(opts)
           opts[:data] = Base64.decode64(opts[:data]) if opts[:data]
