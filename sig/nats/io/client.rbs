@@ -391,6 +391,8 @@ module NATS
       @connect_timeout: Numeric
       @write_timeout: Numeric
       @read_timeout: Numeric
+      @tls: Hash[Symbol, untyped]?
+      @dialer: untyped
 
       def connect: () -> void
 
@@ -415,6 +417,10 @@ module NATS
       def tls_handshake: (OpenSSL::SSL::SSLSocket) -> void
 
       def connect_addrinfo: (String | Integer, Integer, Numeric) -> ::Socket
+
+      def skip_tls_handshake?: () -> bool
+
+      def dial_custom: () -> void
     end
   end
 
