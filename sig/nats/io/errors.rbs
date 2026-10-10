@@ -24,6 +24,9 @@ module NATS
     class ReconnectBufExceeded < NATS::IO::ClientError
     end
 
+    class Disconnected < NATS::IO::ClientError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 

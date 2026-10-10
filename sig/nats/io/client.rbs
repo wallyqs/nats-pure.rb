@@ -132,6 +132,8 @@ module NATS
 
     def flush: (?Integer) -> void
 
+    def rtt: () -> Float
+
     alias servers server_pool
 
     def discovered_servers: () -> Array[String]
