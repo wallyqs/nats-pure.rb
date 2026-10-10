@@ -370,6 +370,9 @@ module NATS
         @closed = nil
         @draining = false
         @on_error = nil
+        # Messages returned so far, for stop_after, which counts them across
+        # the consumers.
+        @delivered = 0
         @ctx = messages_context
       end
 
@@ -445,7 +448,9 @@ module NATS
         psub = @consumer.psub
         return if psub.nil?
 
-        ctx = MessagesContext.new(psub, @params)
+        params = @params
+        params = params.merge(stop_after: params[:stop_after] - @delivered) if params[:stop_after]
+        ctx = MessagesContext.new(psub, params)
         ctx.notify_reconnect = true
         ctx
       end
@@ -475,7 +480,7 @@ module NATS
           end
 
           case @consumer.accept(msg)
-          when :ok then return msg
+          when :ok then return taken(msg, ctx)
           when :gap then reset
           end
         end
@@ -500,6 +505,18 @@ module NATS
           @ctx = messages_context
           @ctx.stop if @closed
         end
+      end
+
+      # taken counts a message returned, and stops after the last one to
+      # take with stop_after.
+      def taken(msg, ctx)
+        @delivered += 1
+        stop_after = @params[:stop_after]
+        if stop_after && @delivered >= stop_after
+          @lock.synchronize { @closed ||= :stopped }
+          ctx.stop
+        end
+        msg
       end
 
       def report(err)

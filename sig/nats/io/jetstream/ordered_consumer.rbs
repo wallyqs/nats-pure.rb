@@ -66,6 +66,8 @@ module NATS
 
       def reset: () -> void
 
+      def taken: (NATS::Msg, NATS::JetStream::MessagesContext) -> NATS::Msg
+
       def report: (Exception) -> void
     end
   end
