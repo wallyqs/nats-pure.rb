@@ -56,7 +56,10 @@ module NATS
     MARKER_REASON = "Nats-Marker-Reason"
 
     VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+\z/
-    VALID_KEY_RE = /\A[-\/_=.a-zA-Z0-9]+$/
+    VALID_KEY_RE = /\A[-\/_=.a-zA-Z0-9]+\z/
+    # The patterns of the keys that watch, list_keys_filtered and history
+    # take, with wildcards, like validSearchKeyRe of nats.go.
+    VALID_SEARCH_KEY_RE = /\A[-\/_=.a-zA-Z0-9*]*>?\z/
 
     class << self
       # validate_bucket_name raises an error unless the name is that of a
@@ -68,16 +71,18 @@ module NATS
         raise InvalidBucketNameError unless bucket.is_a?(String) && bucket.match?(VALID_BUCKET_RE)
       end
 
+      # is_valid_key tells whether a key is valid, like keyValid of nats.go:
+      # letters, digits and "-/_=.", without a "." at either end or two in a
+      # row. A Symbol or an Integer is taken as its String.
       def is_valid_key(key)
-        if key.nil?
-          false
-        elsif key.start_with?(".") || key.end_with?(".")
-          false
-        elsif key !~ VALID_KEY_RE
-          false
-        else
-          true
-        end
+        valid_key?(key, VALID_KEY_RE)
+      end
+
+      # is_valid_search_key tells whether a pattern of keys is valid, like
+      # searchKeyValid of nats.go: a valid key that can have "*" wildcards,
+      # and a ">" at its end.
+      def is_valid_search_key(key)
+        valid_key?(key, VALID_SEARCH_KEY_RE)
       end
 
       # operation_of returns the operation of an entry from the headers of
@@ -96,6 +101,16 @@ module NATS
         when "Remove" then KV_DEL
         end
       end
+
+      private
+
+      def valid_key?(key, re)
+        key = key.to_s if key.is_a?(Symbol) || key.is_a?(Integer)
+        return false unless key.is_a?(String) && !key.empty?
+        return false if key.start_with?(".") || key.end_with?(".") || key.include?("..")
+
+        key.match?(re)
+      end
     end
 
     def initialize(opts = {})
@@ -107,7 +122,8 @@ module NATS
       @put_pre = opts[:put_pre] || @pre
       @js = opts[:js]
       @direct = opts[:direct]
-      @validate_keys = opts[:validate_keys]
+      # Like nats.go, keys are validated unless validate_keys is false.
+      @validate_keys = opts[:validate_keys] != false
     end
 
     # bucket returns the name of the bucket, like Bucket of nats.go.
@@ -122,6 +138,8 @@ module NATS
     # @option params [Integer] :revision Get this revision of the key, like
     #   GetRevision of nats.go.
     # @raise [KeyNotFoundError] When the key does not exist or was deleted.
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def get(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       entry = nil
@@ -173,6 +191,8 @@ module NATS
 
     # put will place the new value for the key into the store
     # and return the revision number.
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def put(key, value)
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
@@ -186,6 +206,8 @@ module NATS
     # @option params [Integer, Symbol] :ttl Seconds after which the server
     #   removes the key, or :never, like KeyTTL of nats.go. The bucket needs
     #   limit_marker_ttl (requires nats-server v2.11.0).
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def create(key, value, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
@@ -219,6 +241,8 @@ module NATS
     WRONG_LAST_SEQUENCE_ERR_CODES = [10071, 10164].freeze
 
     # update will update the value iff the latest revision matches.
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def update(key, value, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
@@ -256,6 +280,8 @@ module NATS
     #   purge takes.
     # @raise [KeyRevisionMismatchError] When :last is not the latest
     #   revision, a NATS::JetStream::Error::WrongLastSequence.
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def delete(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       raise TTLOnDeleteNotSupportedError if params[:ttl]
@@ -282,6 +308,8 @@ module NATS
     #   seq is its revision.
     # @raise [KeyRevisionMismatchError] When :last is not the latest
     #   revision, a NATS::JetStream::Error::WrongLastSequence.
+    # @raise [InvalidKeyError] When the key is invalid, unless the bucket was
+    #   bound with validate_keys: false.
     def purge(key, params = {})
       raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
 
@@ -428,6 +456,8 @@ module NATS
     end
 
     # history retrieves the entries so far for a key.
+    # @raise [InvalidKeyError] When a pattern is invalid, unless the bucket was
+    #   bound with validate_keys: false. Patterns can have the "*" and ">" wildcards.
     def history(key, params = {})
       params[:include_history] = true
       w = watch(key, params)
@@ -464,6 +494,8 @@ module NATS
     #   watch starts, like UpdatesOnly of nats.go; there is then no nil update.
     # @option params [Integer] :resume_from_revision Deliver the entries from
     #   this revision on, like ResumeFromRevision of nats.go.
+    # @raise [InvalidKeyError] When a pattern is invalid, unless the bucket was
+    #   bound with validate_keys: false. Patterns can have the "*" and ">" wildcards.
     def watch(keys, params = {})
       params[:meta_only] ||= false
       params[:include_history] ||= false
@@ -475,6 +507,9 @@ module NATS
         keys.map { |key| "#{@pre}#{key}" }
       else
         "#{@pre}#{keys}"
+      end
+      if @validate_keys && !Array(keys).all? { |key| KeyValue.is_valid_search_key(key) }
+        raise InvalidKeyError
       end
       init_setup = new_cond
       init_setup_done = false
