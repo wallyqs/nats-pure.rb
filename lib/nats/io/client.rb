@@ -1113,6 +1113,29 @@ module NATS
       synchronize { !!(@server_info[:tls_required] || @server_info[:ssl_required]) }
     end
 
+    # The state of the TLS connection to the server, like
+    # TLSConnectionState of nats.go: the TLS version and cipher, and the
+    # certificates of the server.
+    #
+    # @example
+    #   state = nc.tls_connection_state
+    #   state.version                    # => "TLSv1.3"
+    #   state.peer_certificates.first    # => #<OpenSSL::X509::Certificate ...>
+    # @return [NATS::IO::TLSConnectionState]
+    # @raise [NATS::IO::Disconnected] When the connection is not connected,
+    #   as while it reconnects or once it is closed.
+    # @raise [NATS::IO::ConnectionNotTLS] When the connection does not use TLS.
+    def tls_connection_state
+      socket = synchronize do
+        raise NATS::IO::Disconnected.new("nats: server is disconnected") unless connected?
+
+        @io&.tls_socket
+      end
+      raise NATS::IO::ConnectionNotTLS.new("nats: connection is not tls") unless socket
+
+      NATS::IO::TLSConnectionState.of(socket)
+    end
+
     # Whether the server has JetStream enabled.
     def jetstream?
       synchronize { !!@server_info[:jetstream] }
@@ -2188,6 +2211,7 @@ module NATS
 
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
+      raise EOFError, "end of file reached" if line.nil? && @io.tls_socket
       if !line || line.empty?
         raise NATS::IO::NoInfoReceived.new("nats: protocol exception, INFO not received")
       end
@@ -2226,6 +2250,7 @@ module NATS
         raise NATS::IO::ConnectError.new("expected to receive +OK") unless next_op =~ NATS::Protocol::OK
         next_op = @io.read_line(options[:connect_timeout])
       end
+      raise EOFError, "end of file reached" if next_op.nil? && @io.tls_socket
 
       case next_op
       when NATS::Protocol::PONG
@@ -2235,6 +2260,12 @@ module NATS
       else
         raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}")
       end
+    rescue OpenSSL::SSL::SSLError, EOFError, Errno::ECONNRESET, Errno::EPIPE => e
+      raise unless @io.tls_socket
+
+      # Like nats.go, the server closing the connection right after the TLS
+      # handshake, as when it rejects the client certificate, is a TLS error.
+      raise NATS::IO::TLSError.new("nats: tls error: connection closed by remote after TLS handshake: #{e.message}")
     end
 
     # Reconnect logic. generation is @close_generation from when the
@@ -2851,6 +2882,27 @@ module NATS
     DEFAULT_TOTAL_SUB_CONCURRENCY = 24
     DEFAULT_SINGLE_SUB_CONCURRENCY = 1
 
+    # The state of a TLS connection, as Client#tls_connection_state returns
+    # it, like tls.ConnectionState in nats.go: the TLS version (as in
+    # "TLSv1.3"), the name of the cipher, the certificates that the server
+    # presented (its own first), the server name sent for SNI and hostname
+    # verification, the ALPN protocol, if any, and whether the session was
+    # resumed.
+    TLSConnectionState = Struct.new(:version, :cipher, :peer_certificates, :server_name,
+      :negotiated_protocol, :did_resume, :handshake_complete, keyword_init: true) do
+      def self.of(socket)
+        new(
+          version: socket.ssl_version,
+          cipher: socket.cipher&.first,
+          peer_certificates: socket.peer_cert_chain || [socket.peer_cert].compact,
+          server_name: socket.hostname,
+          negotiated_protocol: socket.alpn_protocol,
+          did_resume: socket.session_reused?,
+          handshake_complete: socket.state.start_with?("SSLOK")
+        )
+      end
+    end
+
     # Implementation adapted from https://github.com/redis/redis-rb
     class Socket
       attr_accessor :socket
@@ -2898,8 +2950,18 @@ module NATS
         # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
         tls_socket.hostname = @tls[:hostname]
 
-        tls_handshake(tls_socket)
+        begin
+          tls_handshake(tls_socket)
+        rescue OpenSSL::SSL::SSLError, SystemCallError, EOFError => e
+          # Like ErrTLS of nats.go, with the error of OpenSSL as the cause.
+          raise NATS::IO::TLSError.new("nats: tls error: #{e.message}")
+        end
         @socket = tls_socket
+      end
+
+      # The TLS socket of the connection, or nil when it does not use TLS.
+      def tls_socket
+        @socket if @socket.is_a?(OpenSSL::SSL::SSLSocket)
       end
 
       def read_line(deadline = nil)

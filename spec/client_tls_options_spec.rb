@@ -71,7 +71,7 @@ describe "Client - TLS options" do
 
       expect do
         NATS.connect("tls://127.0.0.1:4901", reconnect: false, tls: {ca_file: "#{certs}/bad-ca.pem"})
-      end.to raise_error(OpenSSL::SSL::SSLError, /certificate verify failed/)
+      end.to raise_error(NATS::IO::TLSError, /certificate verify failed/) { |e| expect(e.cause).to be_a(OpenSSL::SSL::SSLError) }
     end
 
     it "should use the default TLS context for servers given as a list with tls://" do
@@ -81,7 +81,7 @@ describe "Client - TLS options" do
       nc = NATS.connect(servers: ["tls://127.0.0.1:4901"], reconnect: false)
       expect(nc.instance_variable_get(:@io).socket).to be_a(OpenSSL::SSL::SSLSocket)
       nc.close
-    rescue OpenSSL::SSL::SSLError => e
+    rescue NATS::IO::TLSError => e
       expect(e.message).to match(/certificate verify failed/)
     end
 

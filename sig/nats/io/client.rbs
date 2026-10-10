@@ -190,6 +190,8 @@ module NATS
 
     def tls_required?: () -> bool
 
+    def tls_connection_state: () -> NATS::IO::TLSConnectionState
+
     def jetstream?: () -> bool
 
     def error_handler: () -> Proc?
@@ -407,6 +409,18 @@ module NATS
     DEFAULT_SUB_PENDING_MSGS_LIMIT: 65536
     DEFAULT_SUB_PENDING_BYTES_LIMIT: Integer
 
+    class TLSConnectionState < Struct[String | Array[OpenSSL::X509::Certificate] | bool | nil]
+      attr_accessor version: String
+      attr_accessor cipher: String?
+      attr_accessor peer_certificates: Array[OpenSSL::X509::Certificate]
+      attr_accessor server_name: String?
+      attr_accessor negotiated_protocol: String?
+      attr_accessor did_resume: bool
+      attr_accessor handshake_complete: bool
+
+      def self.of: (OpenSSL::SSL::SSLSocket) -> NATS::IO::TLSConnectionState
+    end
+
     class Socket
       attr_accessor socket: ::Socket?
 
@@ -429,6 +443,8 @@ module NATS
       def close: () -> void
 
       def closed?: () -> bool
+
+      def tls_socket: () -> OpenSSL::SSL::SSLSocket?
 
       def remote_address: () -> String
 

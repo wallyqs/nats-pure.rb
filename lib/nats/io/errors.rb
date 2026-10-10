@@ -58,6 +58,10 @@ module NATS
     # a server, like ErrDisconnected of nats.go.
     class Disconnected < ClientError; end
 
+    # When asking for the TLS state of a connection that does not use TLS,
+    # like ErrConnectionNotTLS of nats.go.
+    class ConnectionNotTLS < ClientError; end
+
     # When next_msg is called on a subscription with a callback, like
     # ErrSyncSubRequired of nats.go.
     class SyncSubRequired < ClientError; end
@@ -101,6 +105,12 @@ module NATS
 
     # When the client wants TLS, but the server does not support it.
     class SecureConnWanted < ConnectError; end
+
+    # When the TLS handshake with the server fails, or the server closes
+    # the connection right after it, as when it rejects the client
+    # certificate, like ErrTLS of nats.go. The error of OpenSSL or of the
+    # socket is its cause.
+    class TLSError < ConnectError; end
 
     # When the no_echo option is used but the server does not support it.
     class NoEchoNotSupported < ConnectError; end
