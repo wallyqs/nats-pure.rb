@@ -293,6 +293,13 @@ that returns them on every connect instead; a name may have an Array of values:
 nats = NATS.connect("ws://127.0.0.1:8080", ws_headers_handler: -> { {"Cookie" => "jwt=#{fetch_jwt}"} })
 ```
 
+Behind an HTTP proxy that routes by path, `proxy_path:` is the path to request,
+in place of that of the URL:
+
+```ruby
+nats = NATS.connect("wss://proxy.example.com", proxy_path: "/nats")
+```
+
 ### NKEYS and JWT User Credentials
 
 This requires server with version >= 2.0.0
