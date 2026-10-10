@@ -38,6 +38,7 @@
 
 ### Changed
 
+- Like nats.go, a server list (`servers:` or comma separated URLs) that mixes websocket (`ws://`, `wss://`) and other URLs raises `NATS::IO::MixingWebsocketSchemes` (`ErrMixingWebsocketSchemes`) when connecting, before any dial, as `set_server_pool` already did with a plain `ArgumentError`; the error is an `ArgumentError`, and `set_server_pool` raises it too.
 - Like `GetClientID` and `GetClientIP` of nats.go, `nc.client_id` and `nc.client_ip` raise `NATS::IO::ClientIDNotSupported` and `NATS::IO::ClientIPNotSupported` (`ErrClientIDNotSupported`, `ErrClientIPNotSupported`) when the server did not tell them, as before connecting, instead of returning `nil`, and `client_ip` returns an `IPAddr` instead of a String (`client_ip.to_s` gives the String).
 - Like nats.go, a server that refuses the client with the same auth error twice in a row (an authorization violation, or expired or revoked user or account credentials), with no successful connect in between, stops the reconnecting and closes the connection, also with `max_reconnect_attempts: -1`, which retried such a server for good; `last_error` is that auth error. A single auth error behaves as before, and `ignore_auth_error_abort: true` keeps reconnecting, like `IgnoreAuthErrorAbort`. An auth error of a connected server now marks that server rather than the next one in the pool.
 
