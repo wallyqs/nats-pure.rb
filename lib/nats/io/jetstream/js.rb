@@ -78,6 +78,7 @@ module NATS
           req[:expires] = next_req[:expires].to_i if next_req[:expires]
           req[:no_wait] = next_req[:no_wait] if next_req[:no_wait]
           req[:max_bytes] = next_req[:max_bytes] if next_req[:max_bytes]
+          req[:idle_heartbeat] = next_req[:idle_heartbeat].to_i if next_req[:idle_heartbeat]
           # Priority groups (requires nats-server v2.11.0).
           req.merge!(next_req.slice(:group, :min_pending, :min_ack_pending, :priority, :id).compact)
           req.to_json

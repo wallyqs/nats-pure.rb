@@ -32,4 +32,14 @@ describe "Client - InvalidArg" do
     sub.set_pending_limits(-1, -1)
     expect(sub.pending_limits).to eq([-1, -1])
   end
+
+  it "is raised for an invalid fetch heartbeat, like PullHeartbeat of nats.go" do
+    js = nc.jetstream
+    js.add_stream(name: "INVARG", subjects: ["invarg.>"])
+    js.add_consumer("INVARG", durable_name: "c1", ack_policy: "explicit")
+    sub = js.pull_subscribe("invarg.>", "c1", stream: "INVARG")
+
+    expect { sub.fetch(1, timeout: 1, heartbeat: 0) }.to raise_error(NATS::IO::InvalidArg, /heartbeat/)
+    expect { sub.fetch(1, timeout: 1, heartbeat: 0.5) }.to raise_error(NATS::IO::InvalidArg, /half the timeout/)
+  end
 end

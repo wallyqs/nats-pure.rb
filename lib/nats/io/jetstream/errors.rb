@@ -70,6 +70,10 @@ module NATS
       # its timeout.
       class AsyncPublishTimeout < Error; end
 
+      # When a pull that asked for idle heartbeats heard nothing for two of
+      # them, as when the server is gone or the consumer was deleted.
+      class NoHeartbeat < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
