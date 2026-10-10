@@ -640,11 +640,14 @@ module NATS
 
       def api_request(req_subject, req = "", params = {})
         params[:timeout] ||= @opts[:timeout]
+        trace = @opts[:client_trace]
+        trace_call(trace[:request_sent], req_subject, req) if trace
         msg = begin
           @nc.request(req_subject, req, **params)
         rescue NATS::IO::NoRespondersError
           raise JetStream::Error::ServiceUnavailable
         end
+        trace_call(trace[:response_received], req_subject, msg.data, msg.header) if trace
 
         result = if params[:direct]
           msg
@@ -656,6 +659,16 @@ module NATS
         end
 
         result
+      end
+
+      # trace_call calls a callback of the client_trace option, with only
+      # as many of the arguments as it takes.
+      def trace_call(cb, *args)
+        return unless cb
+
+        arity = cb.respond_to?(:arity) ? cb.arity : -1
+        args = args.take(arity) if arity >= 0
+        cb.call(*args)
       end
 
       # parse_response parses the response of the JetStream API, which has to

@@ -78,6 +78,13 @@ module NATS
     # @option params [Proc] :publish_async_err_handler Called with the
     #   message and the error of each publish_async that fails, like
     #   PublishAsyncErrHandler of nats.go.
+    # @option params [Hash] :client_trace Callbacks that trace the requests
+    #   to the JetStream API, like WithClientTrace of nats.go:
+    #   :request_sent is called with the subject and the payload of each
+    #   request before it is sent, and :response_received with the subject,
+    #   the payload and the header of each response, or with the subject
+    #   and the payload only when it takes two arguments. Publishes, pulls
+    #   and acks are not traced, as in nats.go.
     def initialize(conn, params = {})
       @nc = conn
       @prefix = if params[:prefix]
@@ -90,6 +97,7 @@ module NATS
       @opts = params
       @opts[:timeout] ||= 5 # seconds
       params[:prefix] = @prefix
+      init_client_trace
       init_async_publisher
 
       # Include JetStream::Manager
@@ -567,6 +575,20 @@ module NATS
         options.merge!(schedule_header(**schedule))
       end
       options.empty? ? params[:header] : params[:header].to_h.merge(options)
+    end
+
+    # init_client_trace checks the callbacks of the client_trace option.
+    def init_client_trace
+      trace = @opts[:client_trace]
+      return if trace.nil?
+      raise ArgumentError.new("nats: invalid client_trace #{trace.inspect}, expected a Hash") unless trace.is_a?(Hash)
+
+      trace.each do |name, cb|
+        unless [:request_sent, :response_received].include?(name)
+          raise ArgumentError.new("nats: invalid client_trace callback #{name.inspect}, expected :request_sent or :response_received")
+        end
+        raise ArgumentError.new("nats: invalid client_trace #{name} #{cb.inspect}, expected a callable") unless cb.nil? || cb.respond_to?(:call)
+      end
     end
 
     # init_async_publisher sets up the state of publish_async: the futures
