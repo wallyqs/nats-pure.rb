@@ -303,6 +303,7 @@ RSpec.describe NATS::Service do
   describe "#info" do
     it "returns info" do
       expect(subject.info).to eq({
+        type: "io.nats.micro.v1.info_response",
         name: "foo",
         id: subject.id,
         version: "1.0.0",
@@ -322,6 +323,7 @@ RSpec.describe NATS::Service do
 
     it "returns stats" do
       expect(subject.stats).to eq({
+        type: "io.nats.micro.v1.stats_response",
         name: "foo",
         id: subject.id,
         version: "1.0.0",

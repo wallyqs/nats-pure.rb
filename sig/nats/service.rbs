@@ -4,6 +4,9 @@ module NATS
     ERROR_HEADER: String
     ERROR_CODE_HEADER: String
     DEFAULT_ENDPOINT: String
+    PING_RESPONSE_TYPE: String
+    INFO_RESPONSE_TYPE: String
+    STATS_RESPONSE_TYPE: String
 
     def self.control_subject: (Symbol | String verb, ?String? name, ?String? id) -> String
 
@@ -14,6 +17,14 @@ module NATS
     def on_error: () { (NATS::Service, NATS::Service::NATSError) -> void } -> void
 
     def stopped?: () -> bool
+
+    def reset: () -> void
+
+    def ping: () -> Hash[Symbol, untyped]
+
+    def info: () -> Hash[Symbol, untyped]
+
+    def stats: () -> Hash[Symbol, untyped]
 
     def stop: (?Exception?) -> void
   end

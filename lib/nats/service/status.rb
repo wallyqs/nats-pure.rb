@@ -10,6 +10,12 @@ module NATS
         @started_at = Time.now
       end
 
+      # Restarts the time the service started, as Reset of nats.go micro
+      # does.
+      def reset
+        @started_at = Time.now
+      end
+
       def basic
         {
           name: service.name,
@@ -19,8 +25,17 @@ module NATS
         }
       end
 
+      # The response to a PING, like Ping of nats.go micro.
+      def ping
+        {
+          type: Monitoring::TYPES[:ping],
+          **basic
+        }
+      end
+
       def info
         {
+          type: Monitoring::TYPES[:info],
           **basic,
           description: service.description,
           endpoints: service.endpoints.map do |endpoint|
@@ -36,6 +51,7 @@ module NATS
 
       def stats
         {
+          type: Monitoring::TYPES[:stats],
           **basic,
           started: started_at.utc.iso8601,
           endpoints: service.endpoints.map do |endpoint|

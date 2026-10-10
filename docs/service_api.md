@@ -26,8 +26,10 @@ service = client.services.add(options)
 The options are:
 
 - `:name` - the kind of a service. Multiple services can have the same name. 
-This name can only contain A-Z, a-z, 0-9, dash, and underscore.
-- `:version` - a service version in the form of a SemVer string.
+This name can only contain A-Z, a-z, 0-9, dash, and underscore. A missing or other name
+raises `NATS::Service::InvalidNameError`.
+- `:version` - a service version in the form of a SemVer string. A missing or other version
+raises `NATS::Service::InvalidVersionError`.
 - `:description` (optional) - a human-readable description about a service.
 - `:metadata` (optional) - a hash that holds additional information about a service.
 - `:queue` (optional) - a queue group, `q` by default.
@@ -313,6 +315,7 @@ A service collects different stats during its work, which you can access via `st
 
 ```ruby
 {
+  type: "io.nats.micro.v1.stats_response",
   name: string,
   id: string,
   version: string,
@@ -347,6 +350,7 @@ end
 
 service.stats
 # {
+#   :type=>"io.nats.micro.v1.stats_response",
 #   :name=>"calc",
 #   :id=>"ZrhOTJwPyGeHhM6K257pwl",
 #   :version=>"1.0.0",
@@ -368,6 +372,9 @@ service.stats
 # }
 ```
 
+`service.reset` resets the stats of the endpoints and the time the service started, like
+`Reset` of nats.go micro.
+
 ## Discovery and Monitoring
 
 Using the specified name and automatically generated id, the service automatically 
@@ -383,6 +390,15 @@ Each of those operations can be performed on three subjects:
 - `$SRV.PING|STATS|INFO` - pings and retrieves status for all services 
 - `$SRV.PING|STATS|INFO.<name>` - pings or retrieves status for all services having the specified name 
 - `$SRV.PING|STATS|INFO.<name>.<id>` - pings or retrieves status of a particular service instance
+
+The service answers with `service.ping`, `service.info` and `service.stats`, whose `:type` is
+`NATS::Service::PING_RESPONSE_TYPE`, `INFO_RESPONSE_TYPE` or `STATS_RESPONSE_TYPE`, like the
+`Ping`, `Info` and `Stats` of nats.go micro:
+
+```ruby
+service.ping
+# {:type=>"io.nats.micro.v1.ping_response", :name=>"calc", :id=>"ZrhOTJwPyGeHhM6K257pwl", :version=>"1.0.0", :metadata=>nil}
+```
 
 `NATS::Service.control_subject(verb, name = nil, id = nil)` builds these subjects, for the
 verbs `:ping`, `:info` and `:stats`. Another verb raises `NATS::Service::VerbNotSupportedError`,

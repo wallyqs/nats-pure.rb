@@ -13,7 +13,7 @@ RSpec.describe NATS::Service::Groups do
   subject { described_class.new(parent) }
 
   let(:client) { NATS.connect }
-  let(:service) { client.services.add(name: "foo", queue: "default") }
+  let(:service) { client.services.add(name: "foo", version: "1.0.0", queue: "default") }
   let(:group) { service.groups.add("bar", queue: "queue") }
   let(:parent) { group }
 
