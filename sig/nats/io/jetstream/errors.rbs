@@ -219,6 +219,37 @@ module NATS
         ERR_CODE: 10210
       end
 
+      class FastBatchNotEnabled < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10205
+      end
+
+      class FastBatchInvalidPattern < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10206
+      end
+
+      class FastBatchInvalidID < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10207
+      end
+
+      class FastBatchUnknownID < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10208
+      end
+
+      class MirrorWithBatchPublish < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10209
+      end
+
+      class BatchPublishTooManyInflight < NATS::JetStream::Error::BadRequest
+        ERR_CODE: 10211
+      end
+
+      class FastBatchGapDetected < NATS::JetStream::Error
+        attr_reader expected_last_seq: Integer?
+        attr_reader current_seq: Integer?
+
+        def initialize: (?Integer? expected_last_seq, ?Integer? current_seq) -> void
+      end
+
       BATCH_PUBLISH_ERRORS: Hash[Integer, singleton(NATS::JetStream::Error::BadRequest)]
 
       class PinIdMismatch < NATS::JetStream::Error::APIError

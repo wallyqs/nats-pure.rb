@@ -157,6 +157,17 @@ ack.count # => 3
 js.publish_msg_batch([NATS::Msg.new(subject: "orders.4"), NATS::Msg.new(subject: "orders.5")])
 ```
 
+Streams with `allow_batched` take fast-ingest batches, which they store as the
+messages come, acking them every so many messages (nats-server 2.14):
+
+```ruby
+js.add_stream(name: "metrics", subjects: ["metrics.>"], allow_batched: true)
+
+fast = js.new_fast_publisher(error_handler: ->(e) { warn e.message })
+10_000.times { |i| fast.add("metrics.cpu", i.to_s) } # waits only when acks lag
+fast.close.count # => 10000
+```
+
 Streams and consumers can also be managed directly:
 
 ```ruby

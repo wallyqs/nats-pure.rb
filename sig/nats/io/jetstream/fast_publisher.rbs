@@ -1,0 +1,33 @@
+module NATS
+  class JetStream
+    class FastPubAck < Struct[Integer]
+      attr_accessor batch_seq: Integer
+      attr_accessor ack_seq: Integer
+    end
+
+    class FastPublisher
+      include MonitorMixin
+
+      DEFAULT_FLOW: Integer
+      DEFAULT_MAX_OUTSTANDING_ACKS: Integer
+
+      attr_reader id: String
+
+      def initialize: (NATS::JetStream js, ?flow: Integer, ?max_outstanding_acks: Integer, ?ack_timeout: Numeric?, ?continue_on_gap: bool, ?error_handler: (^(StandardError) -> void)?) -> void
+
+      def add: (String subject, ?String data, ?header: Hash[String, untyped]?, **untyped) -> NATS::JetStream::FastPubAck
+
+      def add_msg: (NATS::Msg msg, **untyped) -> NATS::JetStream::FastPubAck
+
+      def commit: (String subject, ?String data, ?header: Hash[String, untyped]?, ?timeout: Numeric?, **untyped) -> NATS::JetStream::BatchAck
+
+      def commit_msg: (NATS::Msg msg, ?timeout: Numeric?, **untyped) -> NATS::JetStream::BatchAck
+
+      def close: (?timeout: Numeric?) -> NATS::JetStream::BatchAck
+
+      def closed?: () -> bool
+    end
+
+    def new_fast_publisher: (**untyped) -> NATS::JetStream::FastPublisher
+  end
+end
