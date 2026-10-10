@@ -285,6 +285,14 @@ uncompressed when the server does not:
 nats = NATS.connect("ws://127.0.0.1:8080", compression: true)
 ```
 
+`ws_headers:` adds HTTP headers to the upgrade request, such as a cookie that
+the server takes the credentials from, and `ws_headers_handler:` is a Proc
+that returns them on every connect instead; a name may have an Array of values:
+
+```ruby
+nats = NATS.connect("ws://127.0.0.1:8080", ws_headers_handler: -> { {"Cookie" => "jwt=#{fetch_jwt}"} })
+```
+
 ### NKEYS and JWT User Credentials
 
 This requires server with version >= 2.0.0
