@@ -15,7 +15,29 @@ module NATS
       end
 
       class DesiredClusterInfo < Hash[Symbol, untyped]
+        def self.decode: (Hash[Symbol, untyped]) -> NATS::JetStream::API::DesiredClusterInfo
+
         def created_time: () -> Time?
+
+        def status: () -> NATS::JetStream::API::DesiredClusterInfoStatus?
+      end
+
+      class DesiredClusterInfoStatus < Hash[Symbol, untyped]
+        def description: () -> String
+
+        def type: () -> String
+
+        def err: () -> String?
+      end
+
+      module MigrationStatus
+        META: "meta"
+        MEMBERSHIP: "membership"
+        SNAPSHOT: "snapshot"
+        CATCHUP: "catchup"
+        QUORUM: "quorum"
+        BLOCKED: "blocked"
+        UNAVAILABLE: "unavailable"
       end
 
       class PriorityGroupState < Struct[String | Time]
