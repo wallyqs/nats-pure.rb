@@ -9,6 +9,9 @@ module NATS
     end
 
     class Endpoint
+      attr_reader pending_msgs_limit: Integer?
+      attr_reader pending_bytes_limit: Integer?
+
       def subscription: () -> NATS::Subscription
 
       def queue_group_disabled?: () -> bool

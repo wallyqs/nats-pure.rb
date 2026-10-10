@@ -3,6 +3,9 @@ module NATS
     class Error < StandardError
     end
 
+    class InvalidPendingLimitsError < NATS::Service::Error
+    end
+
     class VerbNotSupportedError < NATS::Service::Error
     end
 

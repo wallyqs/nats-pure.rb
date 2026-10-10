@@ -12,6 +12,11 @@ module NATS
 
     class InvalidSubjectError < Error; end
 
+    # When an endpoint is given a pending limit that is not a positive
+    # Integer, like the ErrConfigValidation of WithEndpointPendingLimits of
+    # nats.go micro.
+    class InvalidPendingLimitsError < Error; end
+
     # When control_subject is given a verb other than :ping, :info and
     # :stats, like ErrVerbNotSupported of nats.go micro.
     class VerbNotSupportedError < Error; end

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Services: `endpoints.add` takes `pending_msgs_limit:` and `pending_bytes_limit:`, the pending limits of the endpoint's subscription, like `WithEndpointPendingLimits` of nats.go micro; reaching one stops the service with a slow consumer error, and a limit that is not a positive Integer raises `NATS::Service::InvalidPendingLimitsError`.
 - Services: `queue_group_disabled: true` makes the endpoints of a service (`client.services.add`) or group (`groups.add`), or an endpoint (`endpoints.add`), subscribe without a queue group, like `QueueGroupDisabled` and `WithEndpointQueueGroupDisabled` of nats.go micro, unless a `queue:` is set below; `queue_group_disabled?` tells, and such endpoints report a `queue_group` of `""`. A `queue: ""` still disables the queue group.
 - Services: the `endpoint:` option of `client.services.add` adds an endpoint named `default` when the service is created, like `Config.Endpoint` of nats.go micro; it takes the options of an endpoint (`subject:`, `metadata:`, `queue:`) and its `handler:`, or the block given to `add`, and a service whose default endpoint cannot be added is not created.
 - Services: `NATS::Service.control_subject(verb, name = nil, id = nil)` builds the `$SRV` subject to ping, or get the info or stats of, services, like `ControlSubject` of nats.go micro, raising `NATS::Service::VerbNotSupportedError` or `ServiceNameRequiredError` like `ErrVerbNotSupported` and `ErrServiceNameRequired`. `NATS::Service::ERROR_HEADER` and `ERROR_CODE_HEADER` name the error headers, like `ErrorHeader` and `ErrorCodeHeader`.
