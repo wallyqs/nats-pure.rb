@@ -1,5 +1,9 @@
 module NATS
   class Service
+    class Request < NATS::Msg
+      def respond_json: (untyped obj) -> void
+    end
+
     class Endpoint
       def subscription: () -> NATS::Subscription
     end
