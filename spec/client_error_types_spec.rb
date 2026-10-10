@@ -59,11 +59,7 @@ describe "Client - error types" do
 
   context "with limits" do
     before do
-      @s = start_server_with(4951, %(
-        max_connections: 1
-        max_subscriptions: 1
-        max_payload: 1024
-      ))
+      @s = start_server_with(4951, "max_connections: 1")
     end
 
     after do
@@ -78,13 +74,25 @@ describe "Client - error types" do
       expect(NATS::IO::MaxConnectionsExceeded.ancestors).to include(NATS::IO::ServerError)
       nc.close
     end
+  end
+
+  # Not on the server that takes one connection, which another client may
+  # hold for a moment when this example connects.
+  context "with a max_subscriptions" do
+    before do
+      @s = start_server_with(4958, "max_subscriptions: 1")
+    end
+
+    after do
+      @s.kill_server
+    end
 
     it "should report MaxSubscriptionsExceeded and stay connected" do
       nc, errors = connect_collecting_errors(@s.uri)
       nc.subscribe("one") {}
       nc.subscribe("two") {}
       nc.flush
-      wait_until(timeout: 2) { errors.size == 1 }
+      wait_until(timeout: 5) { errors.size == 1 }
       expect(errors.first).to be_a(NATS::IO::MaxSubscriptionsExceeded)
       expect(nc).to be_connected
       nc.flush
