@@ -27,6 +27,26 @@ module NATS
       def initialize: (String) -> void
     end
 
+    class KeyExistsError < NATS::KeyValue::KeyWrongLastSequenceError
+    end
+
+    class InvalidBucketNameError < ArgumentError
+      def initialize: (?String) -> void
+    end
+
+    class BucketRequiredError < NATS::KeyValue::InvalidBucketNameError
+    end
+
+    class KeyValueConfigRequiredError < ArgumentError
+      def initialize: (?String) -> void
+    end
+
+    class BucketExistsError < NATS::JetStream::Error::StreamNameAlreadyInUse
+      attr_reader bucket: String?
+
+      def initialize: (?Hash[Symbol, untyped]) -> void
+    end
+
     class TTLOnDeleteNotSupportedError < NATS::KeyValue::Error
     end
 

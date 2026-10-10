@@ -8,6 +8,10 @@ module NATS
     ROLLUP: 'Nats-Rollup'
     MARKER_REASON: 'Nats-Marker-Reason'
 
+    VALID_BUCKET_RE: Regexp
+
+    def self.validate_bucket_name: (String?) -> void
+
     def self.operation_of: (Hash[String, String]?) -> String?
 
     @name: String

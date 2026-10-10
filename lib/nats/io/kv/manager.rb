@@ -17,7 +17,13 @@
 module NATS
   class KeyValue
     module Manager
+      # key_value binds to an existing bucket, like KeyValue of nats.go.
+      # @param bucket [String] Name of the bucket.
+      # @return [KeyValue]
+      # @raise [KeyValue::InvalidBucketNameError] When the name is not that of a bucket.
+      # @raise [KeyValue::BucketNotFoundError] When the bucket does not exist.
       def key_value(bucket, params = {})
+        KeyValue.validate_bucket_name(bucket)
         stream = "KV_#{bucket}"
         begin
           si = stream_info(stream)
@@ -34,9 +40,21 @@ module NATS
       # create_key_value creates a KeyValue bucket, like CreateKeyValue of nats.go.
       # @param config [KeyValue::API::KeyValueConfig, Hash, String] Configuration of the bucket, or its name.
       # @return [KeyValue]
+      # @raise [KeyValue::BucketExistsError] When the bucket exists with another configuration.
+      # @raise [KeyValue::InvalidBucketNameError] When the name is not that of a bucket.
+      # @raise [KeyValue::KeyValueConfigRequiredError] When the config is nil.
       def create_key_value(config)
         stream = key_value_stream_config(config)
-        si = add_stream(stream)
+        si = begin
+          add_stream(stream)
+        rescue NATS::JetStream::Error::StreamNameAlreadyInUse => e
+          raise KeyValue::BucketExistsError.new(
+            code: e.code,
+            err_code: e.err_code,
+            description: e.description,
+            bucket: stream.name.delete_prefix("KV_")
+          )
+        end
         key_value_for(si.config, config_validate_keys(config))
       end
 
@@ -93,7 +111,12 @@ module NATS
         end
       end
 
+      # delete_key_value deletes a bucket, like DeleteKeyValue of nats.go.
+      # @param bucket [String] Name of the bucket.
+      # @return [Boolean]
+      # @raise [KeyValue::InvalidBucketNameError] When the name is not that of a bucket.
       def delete_key_value(bucket)
+        KeyValue.validate_bucket_name(bucket)
         delete_stream("KV_#{bucket}")
       end
 
@@ -101,6 +124,8 @@ module NATS
 
       # key_value_stream_config makes the config of the stream of a bucket.
       def key_value_stream_config(config)
+        raise KeyValue::KeyValueConfigRequiredError if config.nil?
+
         config = if !config.is_a?(KeyValue::API::KeyValueConfig)
           config = {bucket: config} if config.is_a?(String)
           KeyValue::API::KeyValueConfig.new(config)
@@ -108,6 +133,7 @@ module NATS
           # Work on a copy, which the defaults below change.
           config.dup
         end
+        KeyValue.validate_bucket_name(config.bucket)
         config.history ||= 1
         config.replicas ||= 1
         duplicate_window = 2 * 60 # 2 minutes
