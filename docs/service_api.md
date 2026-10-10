@@ -33,6 +33,8 @@ This name can only contain A-Z, a-z, 0-9, dash, and underscore.
 - `:queue` (optional) - a queue group.
 - `:error_handler` (optional) - a callable that receives the service and a
 `NATS::Service::NATSError` when one of the service's subscriptions fails (see [Service Lifecycle](#service-lifecycle)).
+- `:endpoint` (optional) - an endpoint added when the service is created, named `default`
+(see [Endpoints](#endpoints)).
 
 While multiple service instances can share the same name, each service has a unique id that is generated upon its creation:
 
@@ -98,6 +100,22 @@ end
 
 client.request("hi").header
 # {"Content-Language"=>"en"}
+```
+
+A service with a single endpoint can get it when it is created, with the `:endpoint` option,
+like `Config.Endpoint` of nats.go micro. The endpoint is named `default`, takes the options
+of an endpoint, and its handler as `:handler` or as the block of `add`:
+
+```ruby
+client.services.add(
+  name: "echo",
+  version: "1.0.0",
+  endpoint: {subject: "echo", handler: ->(message) { message.respond(message.data) }}
+)
+
+client.services.add(name: "hi", version: "1.0.0", endpoint: {subject: "hi"}) do |message|
+  message.respond("Hi!")
+end
 ```
 
 You can also create multiple endpoints:

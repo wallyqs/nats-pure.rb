@@ -4,6 +4,7 @@
 
 ### Added
 
+- Services: the `endpoint:` option of `client.services.add` adds an endpoint named `default` when the service is created, like `Config.Endpoint` of nats.go micro; it takes the options of an endpoint (`subject:`, `metadata:`, `queue:`) and its `handler:`, or the block given to `add`, and a service whose default endpoint cannot be added is not created.
 - Services: `NATS::Service.control_subject(verb, name = nil, id = nil)` builds the `$SRV` subject to ping, or get the info or stats of, services, like `ControlSubject` of nats.go micro, raising `NATS::Service::VerbNotSupportedError` or `ServiceNameRequiredError` like `ErrVerbNotSupported` and `ErrServiceNameRequired`. `NATS::Service::ERROR_HEADER` and `ERROR_CODE_HEADER` name the error headers, like `ErrorHeader` and `ErrorCodeHeader`.
 - Services: `request.respond`, `respond_json` and `respond_with_error` take `headers:` for the response, like `WithHeaders` of nats.go micro; on an error response they are added to the error headers and can override them.
 - Services: `request.respond_json(obj)` responds with `obj` as JSON, like `RespondJSON` of nats.go micro. An object that cannot be generated as JSON raises `NATS::Service::MarshalResponseError` (`ErrMarshalResponse`), and nothing is sent.

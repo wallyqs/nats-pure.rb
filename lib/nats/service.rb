@@ -18,6 +18,10 @@ module NATS
 
     DEFAULT_QUEUE = "q"
 
+    # The name of the endpoint that the :endpoint option adds when a
+    # service is created.
+    DEFAULT_ENDPOINT = "default"
+
     # The root of all control subjects, like APIPrefix of nats.go micro.
     API_PREFIX = "$SRV"
 
@@ -57,12 +61,13 @@ module NATS
     attr_reader :client, :name, :id, :version, :description, :metadata, :queue
     attr_reader :monitoring, :status, :callbacks, :groups, :endpoints
 
-    def initialize(client, options)
+    # Creates a service, see NATS::Services#add.
+    def initialize(client, options, &block)
       super()
       validate(options)
 
       setup_options(options)
-      setup_internals(client)
+      setup_internals(client, options[:endpoint], block)
     end
 
     def on_stats(&block)
@@ -163,18 +168,35 @@ module NATS
       end
     end
 
-    def setup_internals(client)
+    def setup_internals(client, default_endpoint, block)
       @client = client
       @id = NATS::NUID.next
 
       @callbacks = Callbacks.new(self)
       @callbacks.register(:error, &@error_handler) if @error_handler
 
-      @monitoring = Monitoring.new(self)
       @status = Status.new(self)
 
       @groups = Groups.new(self)
       @endpoints = Endpoints.new(self)
+
+      # Like nats.go micro, the default endpoint is added before the
+      # monitoring subscriptions, so that a service whose default endpoint
+      # cannot be added is not created.
+      add_default_endpoint(default_endpoint, block) if default_endpoint
+
+      @monitoring = Monitoring.new(self)
+    end
+
+    # Adds the endpoint of the :endpoint option, named "default", like
+    # Config.Endpoint of nats.go micro.
+    def add_default_endpoint(config, block)
+      raise ArgumentError, "endpoint must be a Hash" unless config.is_a?(Hash)
+
+      handler = config[:handler] || block
+      raise ArgumentError, "endpoint handler is required" unless handler.respond_to?(:call)
+
+      endpoints.add(DEFAULT_ENDPOINT, config.except(:handler)) { |req| handler.call(req) }
     end
   end
 
@@ -188,9 +210,26 @@ module NATS
       client.send(:add_status_listener) { |event| stop_all if event == :close }
     end
 
-    def add(options)
+    # Creates a service, like AddService of nats.go micro.
+    #
+    # @example
+    #   service = client.services.add(
+    #     name: "echo",
+    #     version: "1.0.0",
+    #     endpoint: {subject: "echo", handler: ->(req) { req.respond(req.data) }}
+    #   )
+    #
+    # @param options [Hash] The options of the service: :name, :version,
+    #   :description, :metadata, :queue, :error_handler and :endpoint, an
+    #   endpoint added when the service is created, like Config.Endpoint of
+    #   nats.go micro. The endpoint is named "default" and takes the
+    #   options of an endpoint (:subject, :metadata, :queue) and its
+    #   :handler, or the block.
+    # @return [NATS::Service]
+    # @raise [ArgumentError] When :endpoint has no handler.
+    def add(options, &block)
       client.synchronize do
-        service = NATS::Service.new(client, options)
+        service = NATS::Service.new(client, options, &block)
         insert(service)
 
         service
