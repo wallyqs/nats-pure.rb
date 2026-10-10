@@ -24,8 +24,9 @@ module NATS
     # more once fewer than the threshold remain. Each pull expires after
     # expires seconds, and the server sends idle heartbeats to it, which
     # tell it that the server is still there. After a reconnect, or when
-    # the heartbeats stop, it pulls again. With stop_after, it stops once it
-    # returned that many messages.
+    # the heartbeats stop, it pulls again; next raises NoHeartbeat for the
+    # heartbeats that stopped, unless err_on_missing_heartbeat is false. With
+    # stop_after, it stops once it returned that many messages.
     #
     # @example Iterate over the messages of a pull subscription.
     #
@@ -92,7 +93,8 @@ module NATS
       # @raise [NATS::JetStream::Error::MsgIteratorClosed] When the iterator was
       #   stopped, or drained and has no more messages, or the connection closed.
       # @raise [NATS::JetStream::Error::NoHeartbeat] When no heartbeat came for
-      #   two of them. The iterator pulls again, and next can be called again.
+      #   two of them, unless :err_on_missing_heartbeat is false. The iterator
+      #   pulls again, and next can be called again.
       # @raise [NATS::JetStream::Error::ConsumerDeleted] When the consumer was
       #   deleted, which closes the iterator.
       # @raise [NATS::JetStream::Error::APIError] When the server turned a pull
@@ -186,6 +188,11 @@ module NATS
           end
           raise ArgumentError.new("nats: heartbeat should be at most half of expires") if heartbeat > expires / 2.0
 
+          err_on_missing_heartbeat = params.fetch(:err_on_missing_heartbeat, true)
+          unless [true, false].include?(err_on_missing_heartbeat)
+            raise ArgumentError.new("nats: err_on_missing_heartbeat should be true or false")
+          end
+
           {
             max_messages: max_messages,
             max_bytes: max_bytes,
@@ -195,6 +202,7 @@ module NATS
             threshold_bytes: params[:threshold_bytes] || (max_bytes && (max_bytes / 2.0).ceil),
             bytes_limit: params[:bytes_limit],
             stop_after: params[:stop_after],
+            err_on_missing_heartbeat: err_on_missing_heartbeat,
             **params.slice(:group, :min_pending, :min_ack_pending, :priority)
           }
         end
@@ -228,6 +236,8 @@ module NATS
             # Pull again, as the server may have lost the pulls.
             heard = now
             reset_pending
+            next unless @opts[:err_on_missing_heartbeat]
+
             raise Error::NoHeartbeat.new("nats: no heartbeat received")
           end
 
