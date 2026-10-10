@@ -692,7 +692,29 @@ module NATS
 
       # stream_config_json makes the request to create or update a stream.
       def stream_config_json(config)
-        config.to_h.compact.reject { |key, value| UNSENT_STREAM_DEFAULTS[key]&.include?(value) }.to_json
+        cfg = config.to_h.compact.reject { |key, value| UNSENT_STREAM_DEFAULTS[key]&.include?(value) }
+        cfg[:mirror] = source_domain(cfg[:mirror]) if cfg[:mirror]
+        cfg[:sources] = cfg[:sources].map { |source| source_domain(source) } if cfg[:sources]
+        cfg.to_json
+      end
+
+      # source_domain turns the domain of a stream source into the API
+      # prefix of the JetStream of that domain, as its external, as
+      # convertDomain of nats.go does, leaving the source given as it is.
+      def source_domain(source)
+        return source unless source.is_a?(Hash)
+
+        key = [:domain, "domain"].find { |k| source.key?(k) }
+        return source unless key
+
+        domain = source[key]
+        source = source.except(key)
+        return source if domain.nil? || domain.to_s.empty?
+        if source[:external] || source["external"]
+          raise ArgumentError.new("nats: domain and external are both set")
+        end
+
+        source.merge(external: {api: "$JS.#{domain}.API"})
       end
     end
   end

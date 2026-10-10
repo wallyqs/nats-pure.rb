@@ -461,6 +461,16 @@ module NATS
       #   mirrors, and since nats-server v2.14.0 streams with sources, get
       #   none: the messages published to them are not deduplicated.
       #   @return [Integer]
+      # @!attribute mirror
+      #   The stream that the stream mirrors, as `{name:, ...}`. Given a
+      #   `domain:`, it is the stream of the JetStream of that domain, as
+      #   when it sets `external: {api: "$JS.<domain>.API"}`, like the
+      #   Domain of a StreamSource of nats.go.
+      #   @return [Hash]
+      # @!attribute sources
+      #   The streams that the stream sources, as Hashes like the mirror,
+      #   which take a `domain:` too.
+      #   @return [Array<Hash>]
       # @!attribute compression
       #   Storage compression of a file based stream, "s2" or "none"
       #   (requires nats-server v2.10.0).
