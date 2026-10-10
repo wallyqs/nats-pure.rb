@@ -21,6 +21,7 @@ require_relative "jetstream/header"
 require_relative "jetstream/js"
 require_relative "jetstream/manager"
 require_relative "jetstream/msg"
+require_relative "jetstream/ordered_consumer"
 require_relative "jetstream/pub_ack_future"
 require_relative "jetstream/pull_subscription"
 require_relative "jetstream/push_subscription"
@@ -462,19 +463,45 @@ module NATS
         add_consumer(stream, config)
       end
 
-      # Each pull gets a reply of its own under the subscription.
-      sub = @nc.subscribe("#{@nc.new_inbox}.*")
-      sub.extend(PullSubscription)
+      bind_pull_subscription(stream, params[:consumer])
+    end
 
-      consumer = params[:consumer]
-      subject = "#{@prefix}.CONSUMER.MSG.NEXT.#{stream}.#{consumer}"
-      sub.jsi = JS::Sub.new(
-        js: self,
-        stream: stream,
-        consumer: params[:consumer],
-        nms: subject
-      )
-      sub
+    # ordered_consumer reads the messages of a stream in order, like
+    # OrderedConsumer of the nats.go jetstream package: from an ephemeral
+    # pull consumer that does not ack, keeps its state in memory and has a
+    # single replica, which it creates again from the next stream sequence
+    # it expects whenever it misses a message, or the consumer is gone. It
+    # creates the first consumer at once.
+    #
+    # @example Read the messages of a stream in order.
+    #
+    #   oc = js.ordered_consumer("ORDERS")
+    #   msgs = oc.messages
+    #   msg = msgs.next(timeout: 5)
+    #
+    # @param stream [String] Name of the stream.
+    # @param params [Hash] Options to customize the ordered consumer.
+    # @option params [Array<String>] :filter_subjects Subjects to read, all by default.
+    # @option params [String] :deliver_policy Where to start: "all" (the default),
+    #   "last", "new", "by_start_sequence", "by_start_time" or "last_per_subject".
+    # @option params [Integer] :opt_start_seq Stream sequence to start at, with "by_start_sequence".
+    # @option params [Time, String] :opt_start_time Time to start at, with "by_start_time".
+    # @option params [String] :replay_policy "instant" (the default) or "original".
+    # @option params [Integer] :inactive_threshold Seconds after which the server deletes
+    #   the consumer when unused, 300 by default.
+    # @option params [Boolean] :headers_only Deliver the headers of the messages only,
+    #   with their size in a Nats-Msg-Size header.
+    # @option params [Hash] :metadata Metadata of the consumer.
+    # @option params [Integer] :max_reset_attempts How many times to try creating the
+    #   consumer again, for good by default; a fetch tries once.
+    # @option params [String] :name_prefix Prefix of the names of the consumers, which
+    #   end with a serial number; unique by default.
+    # @return [NATS::JetStream::OrderedConsumer]
+    # @raise [ArgumentError] When an option is invalid.
+    # @raise [NATS::JetStream::Error] When the consumer cannot be created, as when the
+    #   stream does not exist.
+    def ordered_consumer(stream, params = {})
+      OrderedConsumer.new(self, stream, params)
     end
 
     private
@@ -711,6 +738,20 @@ module NATS
       raise JetStream::Error::InvalidJSAck.new("nats: invalid jetstream publish response") if result[:stream].to_s.empty?
 
       PubAck.new(result)
+    end
+
+    # bind_pull_subscription makes a pull subscription to an existing
+    # consumer. Each pull gets a reply of its own under the subscription.
+    def bind_pull_subscription(stream, consumer)
+      sub = @nc.subscribe("#{@nc.new_inbox}.*")
+      sub.extend(PullSubscription)
+      sub.jsi = JS::Sub.new(
+        js: self,
+        stream: stream,
+        consumer: consumer,
+        nms: "#{@prefix}.CONSUMER.MSG.NEXT.#{stream}.#{consumer}"
+      )
+      sub
     end
 
     # msg_ttl formats a message TTL as the server takes it. Longer TTLs than

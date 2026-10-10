@@ -52,8 +52,13 @@ module NATS
       # @return [Hash]
       attr_reader :opts
 
+      # Raised by next after a reconnect, when asked to: an ordered consumer
+      # then creates its consumer again.
       # @!visibility private
-      attr_accessor :on_error
+      class Reconnected < StandardError; end
+
+      # @!visibility private
+      attr_accessor :on_error, :notify_reconnect
 
       # @param psub [NATS::JetStream::PullSubscription] The subscription of the consumer.
       # @param params [Hash] See {PullSubscription#messages}.
@@ -73,6 +78,7 @@ module NATS
         @next_lock = Mutex.new
         # Called with the errors that do not end the iteration.
         @on_error = nil
+        @notify_reconnect = false
       end
 
       # next waits for the next message and returns it.
@@ -194,9 +200,13 @@ module NATS
         heard = MonotonicTime.now
         loop do
           check_closed!
-          if reconnected? || @nc.reconnecting?
-            # Heartbeats do not come while disconnected, and the pulls
-            # that waited on the server are gone after a reconnect.
+          if reconnected?
+            raise Reconnected if @notify_reconnect
+
+            # The pulls that waited on the server are gone.
+            heard = MonotonicTime.now
+          elsif @nc.reconnecting?
+            # Heartbeats do not come while disconnected.
             heard = MonotonicTime.now
           end
           check_pending
@@ -421,13 +431,14 @@ module NATS
     #
     # @!visibility public
     class ConsumeContext
+      # @param messages [MessagesContext, OrderedMessagesContext] The messages to consume.
       # @!visibility private
-      def initialize(psub, params, handler)
+      def initialize(messages, nc, params, handler)
         @handler = handler
         @error_handler = params[:error_handler]
-        @messages = MessagesContext.new(psub, params)
+        @messages = messages
         @messages.on_error = ->(err) { report(err) }
-        @nc = psub.nc
+        @nc = nc
         @done = false
         @lock = Monitor.new
         @done_cond = @lock.new_cond

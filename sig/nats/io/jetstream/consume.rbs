@@ -10,7 +10,12 @@ module NATS
 
       attr_reader opts: Hash[Symbol, untyped]
 
+      class Reconnected < StandardError
+      end
+
       attr_accessor on_error: (^(Exception) -> void)?
+
+      attr_accessor notify_reconnect: bool
 
       def initialize: (NATS::JetStream::PullSubscription, ?Hash[Symbol, untyped]) -> void
 
@@ -59,7 +64,7 @@ module NATS
     end
 
     class ConsumeContext
-      def initialize: (NATS::JetStream::PullSubscription, Hash[Symbol, untyped], ^(NATS::Msg) -> void) -> void
+      def initialize: (NATS::JetStream::MessagesContext | NATS::JetStream::OrderedMessagesContext, NATS::Client, Hash[Symbol, untyped], ^(NATS::Msg) -> void) -> void
 
       def opts: () -> Hash[Symbol, untyped]
 
@@ -71,7 +76,7 @@ module NATS
 
       def wait_closed: (?Numeric?) -> bool
 
-      def messages_context: () -> NATS::JetStream::MessagesContext
+      def messages_context: () -> (NATS::JetStream::MessagesContext | NATS::JetStream::OrderedMessagesContext)
 
       private
 

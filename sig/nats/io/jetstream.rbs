@@ -26,6 +26,8 @@ module NATS
 
     def pull_subscribe: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PullSubscription
 
+    def ordered_consumer: (String, ?Hash[Symbol, untyped]) -> NATS::JetStream::OrderedConsumer
+
     private
 
     def publish_header: (Hash[Symbol, untyped]) -> Hash[String, untyped]?
@@ -55,6 +57,8 @@ module NATS
     def request_with_retry: (NATS::Msg, Numeric, Integer, Numeric) -> NATS::Msg
 
     def pub_ack: (NATS::Msg) -> NATS::JetStream::PubAck
+
+    def bind_pull_subscription: (String, String) -> NATS::JetStream::PullSubscription
 
     def msg_ttl: (Integer | :never) -> String
 

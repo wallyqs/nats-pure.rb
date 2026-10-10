@@ -1,0 +1,72 @@
+module NATS
+  class JetStream
+    class OrderedConsumer
+      DEFAULT_INACTIVE_THRESHOLD: Integer
+      DELIVER_POLICIES: Array[String]
+      MAX_RESET_INTERVAL: Integer
+
+      attr_reader stream: String
+
+      def initialize: (NATS::JetStream, String, ?Hash[Symbol, untyped]) -> void
+
+      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+
+      def next: (?Hash[Symbol, untyped]) -> NATS::Msg
+
+      def consume: (?Hash[Symbol, untyped]) { (NATS::Msg) -> void } -> NATS::JetStream::ConsumeContext
+
+      def messages: (?Hash[Symbol, untyped]) -> NATS::JetStream::OrderedMessagesContext
+
+      def consumer_info: (?Hash[Symbol, untyped]) -> NATS::JetStream::API::ConsumerInfo
+
+      def consumer_name: () -> String?
+
+      def psub: () -> NATS::JetStream::PullSubscription?
+
+      def accept: (NATS::Msg) -> (:ok | :skip | :gap)
+
+      def reset_consumer: (?Integer?, ?(^() -> bool)?) -> void
+
+      def wake_reset: () -> void
+
+      private
+
+      def create_consumer: (Integer, ?(^() -> bool)?) -> void
+
+      def consumer_config: () -> NATS::JetStream::API::ConsumerConfig
+
+      def ordered_config: (Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+    end
+
+    class OrderedMessagesContext
+      include Enumerable[NATS::Msg]
+
+      attr_accessor on_error: (^(Exception) -> void)?
+
+      def initialize: (NATS::JetStream::OrderedConsumer, Hash[Symbol, untyped]) -> void
+
+      def next: (?timeout: Numeric?) -> NATS::Msg
+
+      def each: () { (NATS::Msg) -> void } -> self
+              | () -> Enumerator[NATS::Msg, self]
+
+      def stop: () -> void
+
+      def drain: () -> void
+
+      def closed?: () -> bool
+
+      def closed_reason: () -> (Symbol | Exception | nil)
+
+      private
+
+      def messages_context: () -> NATS::JetStream::MessagesContext?
+
+      def next_in_order: (Float?) -> NATS::Msg
+
+      def reset: () -> void
+
+      def report: (Exception) -> void
+    end
+  end
+end
