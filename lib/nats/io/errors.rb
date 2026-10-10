@@ -58,6 +58,10 @@ module NATS
     # a server, like ErrDisconnected of nats.go.
     class Disconnected < ClientError; end
 
+    # When next_msg is called on a subscription with a callback, like
+    # ErrSyncSubRequired of nats.go.
+    class SyncSubRequired < ClientError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 

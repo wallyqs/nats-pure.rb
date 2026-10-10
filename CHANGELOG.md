@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- `sub.next_msg` on a subscription with a callback raised `NoMethodError`. It now raises `NATS::IO::SyncSubRequired`, a `ClientError`, like `ErrSyncSubRequired` of nats.go.
 - A permissions violation, or a subscription refused as there are too many, made the client disconnect and reconnect, failing what was in flight, such as a `flush`, and on a server that requires auth it was an `AuthError` that also marked the server as one not to reconnect to. Like nats.go, the connection now stays up, and `on_error` gets a `NATS::IO::PermissionViolation` or `MaxSubscriptionsExceeded`, which are `ServerError`s. Connections refused as the server or account has too many are `ServerError`s too, and no longer mark the server.
 
 ## v2.7.0

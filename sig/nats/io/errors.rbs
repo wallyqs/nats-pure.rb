@@ -27,6 +27,9 @@ module NATS
     class Disconnected < NATS::IO::ClientError
     end
 
+    class SyncSubRequired < NATS::IO::ClientError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 
