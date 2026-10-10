@@ -48,6 +48,10 @@ module NATS
     # When a message has headers, which the server does not support.
     class HeadersNotSupported < ClientError; end
 
+    # When an argument is not valid, as a pending limit of zero, like
+    # ErrInvalidArg of nats.go. An ArgumentError, as raised before.
+    class InvalidArg < ArgumentError; end
+
     # When a connection cannot do what was asked while it reconnects.
     class ConnectionReconnecting < ClientError; end
 
