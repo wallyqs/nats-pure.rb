@@ -333,6 +333,14 @@ module NATS
     # (requires nats-server v2.10.0); an empty Array watches all keys.
     # The first update after starting the watch is nil in case
     # there are no pending updates.
+    # @param params [Hash] Options of the watch.
+    # @option params [Boolean] :include_history Deliver every revision of the keys, not just the latest.
+    # @option params [Boolean] :ignore_deletes Leave out deletes and purges.
+    # @option params [Boolean] :meta_only Deliver the entries without their values.
+    # @option params [Boolean] :updates_only Deliver only the updates made after the
+    #   watch starts, like UpdatesOnly of nats.go; there is then no nil update.
+    # @option params [Integer] :resume_from_revision Deliver the entries from
+    #   this revision on, like ResumeFromRevision of nats.go.
     def watch(keys, params = {})
       params[:meta_only] ||= false
       params[:include_history] ||= false
@@ -350,8 +358,24 @@ module NATS
       nc = @js.nc
       watcher = KeyWatcher.new(@js)
 
-      deliver_policy = if !params[:include_history]
+      # Like nats.go, a revision to resume from comes before updates_only,
+      # which comes before the history.
+      resume_from = params[:resume_from_revision]
+      resume_from = nil unless resume_from&.positive?
+      deliver_policy = if resume_from
+        "by_start_sequence"
+      elsif params[:updates_only]
+        "new"
+      elsif !params[:include_history]
         "last_per_subject"
+      end
+      if resume_from
+        # Should the consumer have to be recreated before the first entry,
+        # it resumes from the same revision.
+        watcher._sseq = resume_from - 1
+      elsif params[:updates_only]
+        # There are no initial entries, so no nil update to mark their end.
+        watcher._init_done = true
       end
 
       ordered = {
@@ -366,6 +390,7 @@ module NATS
         manual_ack: true,
         # watch related options.
         deliver_policy: deliver_policy,
+        opt_start_seq: resume_from,
         headers_only: params[:meta_only],
         inactive_threshold: params[:inactive_threshold]
       }
@@ -456,6 +481,12 @@ module NATS
         # not on ordered, and a recreated consumer needs it.
         filter = cinfo.config.to_h.slice(:filter_subject, :filter_subjects)
 
+        if params[:updates_only] && !resume_from
+          # Should the consumer have to be recreated before the first entry,
+          # it starts after the entries that were there before the watch.
+          watcher.synchronize { watcher._sseq = [watcher._sseq, cinfo.delivered.stream_seq].max }
+        end
+
         synchronize do
           init_setup_done = true
           # If no delivered and/or pending messages, then signal
@@ -467,7 +498,7 @@ module NATS
 
           # When there are no more updates send an empty marker
           # to signal that it is done, this will unblock iterators.
-          if (cinfo.num_pending == 0) && (received == 0)
+          if (cinfo.num_pending == 0) && (received == 0) && !watcher._init_done
             watcher._updates.push(nil)
             watcher._init_done = true
           end
