@@ -20,6 +20,7 @@ require_relative "jetstream/header"
 require_relative "jetstream/js"
 require_relative "jetstream/manager"
 require_relative "jetstream/msg"
+require_relative "jetstream/pub_ack_future"
 require_relative "jetstream/pull_subscription"
 require_relative "jetstream/push_subscription"
 
@@ -41,6 +42,15 @@ module NATS
     # stream responded to, like DefaultPubRetryWait of nats.go.
     DEFAULT_PUB_RETRY_WAIT = 0.25
 
+    # How many messages published with publish_async may await their acks
+    # before publish_async stalls, unless given, like the default of
+    # PublishAsyncMaxPending of nats.go.
+    DEFAULT_PUB_ASYNC_MAX_PENDING = 4000
+
+    # How long, in seconds, publish_async stalls before it raises
+    # TooManyStalledMsgs, unless given, like the default stall wait of nats.go.
+    DEFAULT_PUB_ASYNC_STALL_WAIT = 0.2
+
     attr_reader :opts, :prefix, :nc
 
     # Create a new JetStream context for a NATS connection.
@@ -52,6 +62,15 @@ module NATS
     # @option params [Float] :timeout Default timeout to use for JS requests.
     # @option params [Integer] :retry_attempts Default retry_attempts of publish, 2 unless given.
     # @option params [Float] :retry_wait Default retry_wait of publish, in seconds, 0.25 unless given.
+    # @option params [Integer] :publish_async_max_pending How many messages
+    #   published with publish_async may await their acks before it stalls,
+    #   like PublishAsyncMaxPending of nats.go: 4000 unless given.
+    # @option params [Float] :publish_async_stall_wait Default stall_wait of publish_async, in seconds, 0.2 unless given.
+    # @option params [Float] :publish_async_timeout Default timeout of
+    #   publish_async, in seconds, like PublishAsyncTimeout of nats.go: none unless given.
+    # @option params [Proc] :publish_async_err_handler Called with the
+    #   message and the error of each publish_async that fails, like
+    #   PublishAsyncErrHandler of nats.go.
     def initialize(conn, params = {})
       @nc = conn
       @prefix = if params[:prefix]
@@ -64,6 +83,7 @@ module NATS
       @opts = params
       @opts[:timeout] ||= 5 # seconds
       params[:prefix] = @prefix
+      init_async_publisher
 
       # Include JetStream::Manager
       extend Manager
@@ -137,24 +157,85 @@ module NATS
     def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
       retry_attempts, retry_wait = pub_retry(params)
-      # The options add to a copy of the header, which the caller may reuse.
-      options = {
-        Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
-        Header::MSG_TTL => (msg_ttl(params[:ttl]) if params[:ttl])
-      }.compact
-      if (schedule = params[:schedule])
-        raise ArgumentError.new("nats: invalid schedule #{schedule.inspect}, expected a Hash") unless schedule.is_a?(Hash)
-
-        options.merge!(schedule_header(**schedule))
-      end
-      header = options.empty? ? params[:header] : params[:header].to_h.merge(options)
-
       # Send message with headers.
       msg = NATS::Msg.new(subject: subject,
         data: payload,
-        header: header)
+        header: publish_header(params))
 
       pub_ack(request_with_retry(msg, params[:timeout], retry_attempts, retry_wait))
+    end
+
+    # publish_async publishes a message for JetStream without waiting for
+    # its ack, like PublishAsync of nats.go, and returns a future for the
+    # ack. The acks come to a single subscription of the context, to a reply
+    # subject with a token per message. When the server says that no stream
+    # took the message, it is published again, as with publish.
+    #
+    # @example
+    #   futures = 100.times.map { |i| js.publish_async("orders.new", "order #{i}") }
+    #   js.publish_async_complete(timeout: 5)
+    #   futures.each { |future| puts future.ack&.seq || future.err }
+    #
+    # @param subject [String] The subject from a stream where the message will be sent.
+    # @param payload [String] The payload of the message.
+    # @param params [Hash] Options to customize the publish, as those of
+    #   publish: :header, :stream, :ttl, :schedule, :retry_attempts and :retry_wait.
+    # @option params [Float] :timeout Seconds after which the future fails
+    #   with AsyncPublishTimeout unless the message was acked, like
+    #   PublishAsyncTimeout of nats.go; the :publish_async_timeout of the
+    #   context, or none, unless given.
+    # @option params [Float] :stall_wait Seconds to wait, while as many
+    #   messages await their acks as publish_async_max_pending, for one of
+    #   them to be acked, like WithStallWait of nats.go; the
+    #   :publish_async_stall_wait of the context, or 0.2, unless given.
+    # @raise [ArgumentError] When an option is invalid, before the message is sent.
+    # @raise [NATS::JetStream::Error::TooManyStalledMsgs] When too many
+    #   messages still await their acks after the stall wait. The message is
+    #   not published.
+    # @return [PubAckFuture]
+    def publish_async(subject, payload = "", **params)
+      retry_attempts, retry_wait = pub_retry(params)
+      timeout = params.fetch(:timeout) { @opts[:publish_async_timeout] }
+      stall_wait = params.fetch(:stall_wait) { @opts.fetch(:publish_async_stall_wait, DEFAULT_PUB_ASYNC_STALL_WAIT) }
+      positive_seconds!(:timeout, timeout) unless timeout.nil?
+      positive_seconds!(:stall_wait, stall_wait)
+      header = publish_header(params)
+
+      @async_mon.synchronize do
+        start_async_reply_sub unless @async_sub
+        @async_tokens += 1
+        msg = NATS::Msg.new(subject: subject, reply: "#{@async_prefix}#{@async_tokens.to_s(36)}",
+          data: payload, header: header)
+        future = PubAckFuture.new(msg, retry_attempts: retry_attempts, retry_wait: retry_wait, timeout: timeout)
+        @async_acks[msg.reply] = future
+        stall_async_publish(msg.reply, stall_wait)
+        publish_async_msg(future)
+      end
+    end
+
+    # publish_async_pending is the number of messages published with
+    # publish_async that await their acks, like PublishAsyncPending of nats.go.
+    # @return [Integer]
+    def publish_async_pending
+      @async_mon.synchronize { @async_acks.size }
+    end
+
+    # publish_async_complete waits until no message published with
+    # publish_async awaits its ack, like PublishAsyncComplete of nats.go.
+    # @param timeout [Float, nil] Seconds to wait, or nil to wait for as long as it takes.
+    # @return [true]
+    # @raise [NATS::Timeout] When messages still await their acks after the timeout.
+    def publish_async_complete(timeout: nil)
+      @async_mon.synchronize do
+        deadline = MonotonicTime.now + timeout if timeout
+        until @async_acks.empty?
+          remaining = deadline - MonotonicTime.now if deadline
+          raise NATS::Timeout.new("nats: timeout waiting for the async publishes to complete") if remaining && remaining <= 0
+
+          @async_done.wait(remaining)
+        end
+      end
+      true
     end
 
     # subscribe binds or creates a push subscription to a JetStream pull consumer.
@@ -396,6 +477,194 @@ module NATS
     end
 
     private
+
+    # publish_header makes the header of a publish from its options.
+    def publish_header(params)
+      # The options add to a copy of the header, which the caller may reuse.
+      options = {
+        Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
+        Header::MSG_TTL => (msg_ttl(params[:ttl]) if params[:ttl])
+      }.compact
+      if (schedule = params[:schedule])
+        raise ArgumentError.new("nats: invalid schedule #{schedule.inspect}, expected a Hash") unless schedule.is_a?(Hash)
+
+        options.merge!(schedule_header(**schedule))
+      end
+      options.empty? ? params[:header] : params[:header].to_h.merge(options)
+    end
+
+    # init_async_publisher sets up the state of publish_async: the futures
+    # of the messages that await acks by reply subject, and the conditions
+    # that stalled publishes, publish_async_complete and the timer wait on.
+    def init_async_publisher
+      max_pending = @opts.fetch(:publish_async_max_pending, DEFAULT_PUB_ASYNC_MAX_PENDING)
+      unless max_pending.is_a?(Integer) && max_pending >= 1
+        raise ArgumentError.new("nats: invalid publish_async_max_pending #{max_pending.inspect}, expected an Integer of at least 1")
+      end
+      err_handler = @opts[:publish_async_err_handler]
+      unless err_handler.nil? || err_handler.respond_to?(:call)
+        raise ArgumentError.new("nats: invalid publish_async_err_handler #{err_handler.inspect}, expected a callable")
+      end
+
+      @async_max_pending = max_pending
+      @async_err_handler = err_handler
+      @async_mon = Monitor.new
+      @async_stall = @async_mon.new_cond
+      @async_done = @async_mon.new_cond
+      @async_timer_cond = @async_mon.new_cond
+      @async_timer = nil
+      @async_acks = {}
+      @async_tokens = 0
+      @async_sub = nil
+      @async_prefix = nil
+    end
+
+    # start_async_reply_sub subscribes to the replies of all the messages
+    # that publish_async publishes, as nats.go does.
+    def start_async_reply_sub
+      @async_prefix = "#{@nc.new_inbox}."
+      @async_sub = @nc.subscribe("#{@async_prefix}*") { |msg| handle_async_reply(msg) }
+    end
+
+    # stall_async_publish waits, while more messages await their acks than
+    # may, for the stall wait, and drops the message when it is up.
+    def stall_async_publish(reply, stall_wait)
+      deadline = MonotonicTime.now + stall_wait
+      while @async_acks.size > @async_max_pending
+        remaining = deadline - MonotonicTime.now
+        if remaining <= 0
+          @async_acks.delete(reply)
+          raise JetStream::Error::TooManyStalledMsgs.new("nats: stalled with too many outstanding async published messages")
+        end
+        @async_stall.wait(remaining)
+      end
+    end
+
+    # publish_async_msg publishes the message of a future, starting its
+    # timeout over, as nats.go does. A message that cannot be published
+    # ends its future with the error. The lock is held.
+    def publish_async_msg(future)
+      if future.timeout
+        future.deadline = MonotonicTime.now + future.timeout
+        wake_async_timer
+      end
+      begin
+        @nc.publish_msg(future.msg)
+      rescue
+        remove_async_future(future.msg.reply)
+        raise
+      end
+      future
+    end
+
+    # handle_async_reply resolves the future of a reply, or publishes its
+    # message again when no stream responded and it has retries left.
+    def handle_async_reply(msg)
+      err = nil
+      ack = nil
+      future = nil
+      @async_mon.synchronize do
+        future = @async_acks[msg.subject]
+        return unless future
+
+        if msg.header && msg.header[JS::Header::Status] == JS::Status::ServiceUnavailable && msg.data.to_s.empty?
+          if future.retry_attempts < 0 || future.retries < future.retry_attempts
+            future.retries += 1
+            future.retry_at = MonotonicTime.now + future.retry_wait
+            wake_async_timer
+            return
+          end
+          err = JetStream::Error::NoStreamResponse.new("nats: no response from stream")
+        else
+          begin
+            ack = pub_ack(msg)
+          rescue JetStream::Error => e
+            err = e
+          end
+        end
+        remove_async_future(msg.subject)
+      end
+      resolve_async_future(future, ack: ack, err: err)
+    end
+
+    # resolve_async_future ends the publish of a future, calling the error
+    # handler when it failed. It is called without holding the lock.
+    def resolve_async_future(future, ack: nil, err: nil)
+      return unless future.resolve(ack: ack, err: err)
+
+      @async_err_handler&.call(future.msg, err) if err
+    rescue => e
+      # An error of the handler goes to the error callback of the connection.
+      @nc.send(:err_cb_call, @nc, e, nil)
+    end
+
+    # remove_async_future forgets the future of a reply, waking stalled
+    # publishes and publish_async_complete. The lock is held.
+    def remove_async_future(reply)
+      @async_acks.delete(reply)
+      @async_stall.broadcast
+      @async_done.broadcast if @async_acks.empty?
+    end
+
+    # wake_async_timer makes the timer, which retries messages and fails
+    # futures past their timeout, look at the futures again, starting it
+    # unless it runs. The lock is held.
+    def wake_async_timer
+      if @async_timer
+        @async_timer_cond.signal
+      else
+        @async_timer = Thread.new { run_async_timer }
+      end
+    end
+
+    # run_async_timer retries the messages whose retry is due and fails the
+    # futures past their timeout, until no future has a retry or timeout.
+    def run_async_timer
+      loop do
+        retries = []
+        expired = []
+        @async_mon.synchronize do
+          now = MonotonicTime.now
+          next_at = nil
+          @async_acks.each do |reply, future|
+            if future.deadline && future.deadline <= now
+              expired << reply
+            elsif future.retry_at && future.retry_at <= now
+              future.retry_at = nil
+              retries << future
+            end
+            [future.deadline, future.retry_at].compact.each { |at| next_at = at if next_at.nil? || at < next_at }
+          end
+          expired.map! do |reply|
+            future = @async_acks[reply]
+            remove_async_future(reply)
+            future
+          end
+          if retries.empty? && expired.empty?
+            if next_at.nil?
+              @async_timer = nil
+              return
+            end
+            @async_timer_cond.wait(next_at - now)
+          end
+        end
+        retries.each do |future|
+          @async_mon.synchronize { publish_async_msg(future) if @async_acks.key?(future.msg.reply) }
+        rescue => e
+          resolve_async_future(future, err: e)
+        end
+        expired.each do |future|
+          resolve_async_future(future, err: JetStream::Error::AsyncPublishTimeout.new("nats: timeout waiting for ack"))
+        end
+      end
+    end
+
+    # positive_seconds! checks that an option is a positive number of seconds.
+    def positive_seconds!(name, value)
+      return if value.is_a?(Numeric) && value.positive? && value.finite?
+
+      raise ArgumentError.new("nats: invalid #{name} #{value.inspect}, expected seconds of more than 0")
+    end
 
     # pub_retry takes the retry options of a publish, which default to those
     # of the context.

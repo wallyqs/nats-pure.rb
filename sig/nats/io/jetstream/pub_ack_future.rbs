@@ -1,0 +1,31 @@
+module NATS
+  class JetStream
+    class PubAckFuture
+      attr_reader msg: NATS::Msg
+
+      attr_reader retry_attempts: Integer
+
+      attr_reader retry_wait: Numeric
+
+      attr_reader timeout: Numeric?
+
+      attr_accessor retries: Integer
+
+      attr_accessor retry_at: Float?
+
+      attr_accessor deadline: Float?
+
+      def initialize: (NATS::Msg, ?retry_attempts: Integer, ?retry_wait: Numeric, ?timeout: Numeric?) -> void
+
+      def ack: () -> NATS::JetStream::PubAck?
+
+      def err: () -> StandardError?
+
+      def done?: () -> bool
+
+      def wait: (?Numeric?) -> NATS::JetStream::PubAck
+
+      def resolve: (?ack: NATS::JetStream::PubAck?, ?err: StandardError?) -> bool
+    end
+  end
+end

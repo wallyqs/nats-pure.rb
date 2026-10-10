@@ -62,6 +62,14 @@ module NATS
       # When the response of the JetStream API is not a JSON object.
       class InvalidJetStreamResponse < Error; end
 
+      # When publish_async stalls for longer than its stall wait, as too
+      # many messages await their acks.
+      class TooManyStalledMsgs < Error; end
+
+      # When a message published with publish_async is not acked within
+      # its timeout.
+      class AsyncPublishTimeout < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq

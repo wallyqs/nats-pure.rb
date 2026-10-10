@@ -7,16 +7,48 @@ module NATS
 
     DEFAULT_PUB_RETRY_WAIT: Float
 
+    DEFAULT_PUB_ASYNC_MAX_PENDING: Integer
+
+    DEFAULT_PUB_ASYNC_STALL_WAIT: Float
+
     class PubAck < Struct[String | Numeric | bool]
     end
 
     def publish: (String, ?String, **untyped) -> NATS::JetStream::PubAck
+
+    def publish_async: (String, ?String, **untyped) -> NATS::JetStream::PubAckFuture
+
+    def publish_async_pending: () -> Integer
+
+    def publish_async_complete: (?timeout: Numeric?) -> true
 
     def subscribe: (String, Hash[Symbol, untyped]) { (?(NATS::Msg | String), ?String, ?String, ?Hash[Symbol, untyped]) -> void } -> NATS::JetStream::PushSubscription
 
     def pull_subscribe: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PullSubscription
 
     private
+
+    def publish_header: (Hash[Symbol, untyped]) -> Hash[String, untyped]?
+
+    def init_async_publisher: () -> void
+
+    def start_async_reply_sub: () -> void
+
+    def stall_async_publish: (String, Numeric) -> void
+
+    def publish_async_msg: (NATS::JetStream::PubAckFuture) -> NATS::JetStream::PubAckFuture
+
+    def handle_async_reply: (NATS::Msg) -> void
+
+    def resolve_async_future: (NATS::JetStream::PubAckFuture, ?ack: NATS::JetStream::PubAck?, ?err: StandardError?) -> void
+
+    def remove_async_future: (String) -> void
+
+    def wake_async_timer: () -> void
+
+    def run_async_timer: () -> void
+
+    def positive_seconds!: (Symbol, untyped) -> void
 
     def pub_retry: (Hash[Symbol, untyped]) -> [Integer, Numeric]
 
