@@ -100,6 +100,7 @@ module NATS
     @single_url_connect_used: bool
 
     @connect_called: bool
+    @connect_retrying: bool
 
     @resp_sub: NATS::Subscription?
     @resp_map: Hash[String | Symbol, untyped]?
@@ -320,7 +321,9 @@ module NATS
 
     def process_connect_init: () -> void
 
-    def attempt_reconnect: () -> void
+    def retry_connect_in_background: () -> Thread
+
+    def attempt_reconnect: (Integer, ?initial: bool) -> void
 
     def close_connection: (Integer, bool) -> void
 
