@@ -237,9 +237,16 @@ module NATS
       @user_nkey_cb = nil
       @user_jwt_cb = nil
       @signature_cb = nil
+      @user_credentials_data = nil
+      @user_jwt = nil
+      @user_seed = nil
 
       # Tokens
       @auth_token = nil
+      @token_handler = nil
+
+      # Callback that returns the user and password.
+      @user_info_handler = nil
 
       @inbox_prefix = "_INBOX"
 
@@ -375,17 +382,24 @@ module NATS
         class << self; alias_method :request, :old_request; end
       end
 
+      validate_auth_options!
+
       # NKEYS
       @signature_cb ||= opts[:user_signature_cb]
       @user_jwt_cb ||= opts[:user_jwt_cb]
       @user_nkey_cb ||= opts[:user_nkey_cb]
       @user_credentials ||= opts[:user_credentials]
+      @user_credentials_data ||= opts[:user_credentials_data]
+      @user_jwt ||= opts[:user_jwt]
+      @user_seed ||= opts[:user_seed]
       @nkeys_seed ||= opts[:nkeys_seed]
 
-      setup_nkeys_connect if @user_credentials || @nkeys_seed
+      setup_nkeys_connect if @user_credentials || @user_credentials_data || @user_jwt || @nkeys_seed
 
       # Tokens, if set will take preference over the user@server uri token
       @auth_token ||= opts[:auth_token]
+      @token_handler = opts[:token_handler]
+      @user_info_handler = opts[:user_info_handler]
 
       # Check for TLS usage
       @tls = @options[:tls]
@@ -881,6 +895,42 @@ module NATS
 
     private
 
+    # Rejects auth options that cannot be used together, like nats.go.
+    def validate_auth_options!
+      opts = @options
+
+      %i[token_handler user_info_handler user_jwt_cb user_signature_cb user_nkey_cb].each do |opt|
+        if opts[opt] && !opts[opt].respond_to?(:call)
+          raise ArgumentError, "nats: #{opt} must respond to call"
+        end
+      end
+
+      if opts[:token_handler]
+        url_token = server_pool.any? { |srv| srv[:uri].user && !srv[:uri].password }
+        raise ArgumentError, "nats: token and token handler both set" if opts[:auth_token] || url_token
+      end
+
+      if opts[:user_info_handler] && (opts[:user] || opts[:pass])
+        raise ArgumentError, "nats: cannot set user info handler and user/pass"
+      end
+
+      if opts[:user_jwt].nil? != opts[:user_seed].nil?
+        raise ArgumentError, "nats: user_jwt and user_seed must be given together"
+      end
+
+      users = %i[user_credentials user_credentials_data user_jwt user_jwt_cb].select { |opt| opts[opt] }
+      raise ArgumentError, "nats: only one of #{users.join(", ")} may be set" if users.size > 1
+
+      nkeys = %i[nkeys_seed user_nkey_cb].select { |opt| opts[opt] }
+      raise ArgumentError, "nats: only one of #{nkeys.join(", ")} may be set" if nkeys.size > 1
+      raise ArgumentError, "nats: user callback and nkey defined" if users.any? && nkeys.any?
+
+      if !opts[:user_signature_cb]
+        raise ArgumentError, "nats: user callback defined without a signature handler" if opts[:user_jwt_cb]
+        raise ArgumentError, "nats: nkey defined without a signature handler" if opts[:user_nkey_cb]
+      end
+    end
+
     def validate_settings!
       raise ArgumentError, "nats: reconnect_buf_size must be an Integer" unless @options[:reconnect_buf_size].is_a?(Integer)
 
@@ -1346,7 +1396,13 @@ module NATS
         cs[:sig] = @signature_cb.call(nonce)
       end
 
+      # Like nats.go, credentials in the URL take precedence over the handler.
+      if @user_info_handler && !auth_connection?
+        cs[:user], cs[:pass] = @user_info_handler.call
+      end
+
       cs[:auth_token] = @auth_token if @auth_token
+      cs[:auth_token] = @token_handler.call if @token_handler
 
       if @server_info[:headers]
         cs[:headers] = @server_info[:headers]
@@ -1914,7 +1970,42 @@ module NATS
         # When the credentials are within a single decorated file.
         @user_jwt_cb = jwt_cb_for_creds_file(@user_credentials)
         @signature_cb = signature_cb_for_creds_file(@user_credentials)
+      elsif @user_credentials_data
+        # The contents of a decorated credentials file.
+        jwt = creds_section(@user_credentials_data.lines, "BEGIN NATS USER JWT")
+        seed = creds_section(@user_credentials_data.lines, "BEGIN USER NKEY SEED")
+        raise(Error, "No JWT found in user_credentials_data") unless jwt
+        raise(Error, "No nkey user seed found in user_credentials_data") unless seed
+
+        @user_jwt_cb = proc { jwt }
+        @signature_cb = signature_cb_for_seed(seed)
+      elsif @user_jwt
+        user_jwt = @user_jwt
+        @user_jwt_cb = proc { user_jwt }
+        @signature_cb = signature_cb_for_seed(@user_seed)
       end
+    end
+
+    # Returns the line that follows the marker line in a credentials file.
+    def creds_section(lines, marker)
+      idx = lines.index { |line| line.include?(marker) }
+      lines[idx + 1]&.chomp if idx
+    end
+
+    def signature_cb_for_seed(seed)
+      # Fail right away on an invalid seed. Each signature wipes the copy
+      # of the seed it was made with.
+      begin
+        NKEYS.from_seed(seed.dup).wipe!
+      rescue NKEYS::Error, ArgumentError => e
+        raise ArgumentError, "nats: invalid nkey seed (#{e.message})"
+      end
+      proc { |nonce|
+        kp = NKEYS.from_seed(seed.dup)
+        raw_signed = kp.sign(nonce)
+        kp.wipe!
+        Base64.urlsafe_encode64(raw_signed).delete("=")
+      }
     end
 
     def signature_cb_for_nkey_file(nkey)
