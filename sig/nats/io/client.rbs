@@ -179,6 +179,8 @@ module NATS
 
     def single_url_connect_used?: () -> bool
 
+    def check_reconnect_buf!: () -> void
+
     def send_command: (String) -> void
 
     def unsubscribe: (NATS::Subscription, Integer?) -> void
@@ -260,6 +262,8 @@ module NATS
 
     DEFAULT_PING_INTERVAL: 120
     DEFAULT_PING_MAX: 2
+
+    DEFAULT_RECONNECT_BUF_SIZE: Integer
 
     DEFAULT_CONNECT_TIMEOUT: 2
     DEFAULT_READ_WRITE_TIMEOUT: 2

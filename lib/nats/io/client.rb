@@ -332,6 +332,7 @@ module NATS
       opts[:reconnect_time_wait] = NATS::IO::RECONNECT_TIME_WAIT if opts[:reconnect_time_wait].nil?
       opts[:reconnect_jitter] = NATS::IO::RECONNECT_JITTER if opts[:reconnect_jitter].nil?
       opts[:reconnect_jitter_tls] = NATS::IO::RECONNECT_JITTER_TLS if opts[:reconnect_jitter_tls].nil?
+      opts[:reconnect_buf_size] = NATS::IO::DEFAULT_RECONNECT_BUF_SIZE if opts[:reconnect_buf_size].nil?
       opts[:max_reconnect_attempts] = NATS::IO::MAX_RECONNECT_ATTEMPTS if opts[:max_reconnect_attempts].nil?
       opts[:ping_interval] = NATS::IO::DEFAULT_PING_INTERVAL if opts[:ping_interval].nil?
       opts[:max_outstanding_pings] = NATS::IO::DEFAULT_PING_MAX if opts[:max_outstanding_pings].nil?
@@ -483,6 +484,8 @@ module NATS
         return publish_msg(NATS::Msg.new(subject: subject, data: msg, reply: opt_reply, header: options[:header]))
       end
 
+      check_reconnect_buf!
+
       # Accounting
       msg_size = msg.bytesize
       @stats[:out_msgs] += 1
@@ -496,6 +499,8 @@ module NATS
     def publish_msg(msg)
       raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
       raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
+
+      check_reconnect_buf!
 
       msg.reply ||= "".dup
       msg.data ||= "".dup
@@ -874,6 +879,8 @@ module NATS
     private
 
     def validate_settings!
+      raise ArgumentError, "nats: reconnect_buf_size must be an Integer" unless @options[:reconnect_buf_size].is_a?(Integer)
+
       %i[reconnect_jitter reconnect_jitter_tls].each do |opt|
         jitter = @options[opt]
         raise ArgumentError, "nats: #{opt} must be a number of seconds >= 0" unless jitter.is_a?(Numeric) && jitter >= 0
@@ -1125,6 +1132,18 @@ module NATS
 
     def single_url_connect_used?
       @single_url_connect_used
+    end
+
+    # While reconnecting, publishes are buffered until the connection is back,
+    # up to reconnect_buf_size bytes, like nats.go; a negative size disables
+    # the buffering. The buffer also holds at most MAX_PENDING_SIZE commands.
+    def check_reconnect_buf!
+      return unless reconnecting?
+
+      limit = @options[:reconnect_buf_size]
+      if limit < 0 || @pending_size >= limit || @pending_queue.size >= @pending_queue.max
+        raise NATS::IO::ReconnectBufExceeded.new("nats: outbound buffer limit exceeded")
+      end
     end
 
     def send_command(command)
@@ -1983,6 +2002,9 @@ module NATS
     # Ping intervals
     DEFAULT_PING_INTERVAL = 120
     DEFAULT_PING_MAX = 2
+
+    # Bytes of publishes buffered while reconnecting.
+    DEFAULT_RECONNECT_BUF_SIZE = 8 * 1024 * 1024
 
     # Default IO timeouts
     DEFAULT_CONNECT_TIMEOUT = 2
