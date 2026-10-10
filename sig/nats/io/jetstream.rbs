@@ -42,6 +42,14 @@ module NATS
 
     def push_consumer: (String, String, ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
 
+    def create_or_update_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> NATS::JetStream::Consumer
+
+    def create_push_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+    def update_push_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
+    def create_or_update_push_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> NATS::JetStream::PushConsumer
+
     private
 
     def sync_publish: (String, String?, Hash[String, untyped]?, Hash[Symbol, untyped]) -> NATS::JetStream::PubAck

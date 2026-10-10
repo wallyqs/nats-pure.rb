@@ -4,6 +4,7 @@
 
 ### Added
 
+- JetStream: the context creates consumers and returns handles, like `StreamConsumerManager` of nats.go: `js.create_or_update_consumer(stream, config)` returns a `Consumer` (`CreateOrUpdateConsumer`), and `js.create_push_consumer`, `js.update_push_consumer` and `js.create_or_update_push_consumer(stream, config)` return a `PushConsumer` (`CreatePushConsumer`, `UpdatePushConsumer`, `CreateOrUpdatePushConsumer`), raising `NotPushConsumer` for a config without `deliver_subject`; `js.create_consumer`, `js.update_consumer` and `add_consumer` still return `ConsumerInfo`.
 - JetStream: a consume `error_handler:` that takes two arguments is called with the `ConsumeContext` and the error, like `ConsumeErrHandlerFunc` of nats.go, so that it can stop or drain the consumption; handlers of one argument still get the error only. This holds for pull subscriptions, `Consumer`, ordered and push consumers.
 - JetStream: `messages(err_on_missing_heartbeat: false)` on pull subscriptions and `Consumer` handles pulls again when the idle heartbeats stop, and keeps waiting, instead of raising `NoHeartbeat` from `next`, like `WithMessagesErrOnMissingHeartbeat(false)` of nats.go; the default stays `true`, and as in nats.go `consume` and ordered consumers ignore it.
 - JetStream: `consume` without a block, on pull subscriptions, `Consumer`, ordered and push consumers, raises `NATS::JetStream::Error::HandlerRequired` ("nats: handler cannot be empty"), like `ErrHandlerRequired` of nats.go; it is an `ArgumentError`, as raised before.
