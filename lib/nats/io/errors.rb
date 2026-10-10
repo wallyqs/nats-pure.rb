@@ -30,6 +30,9 @@ module NATS
     # When we cannot connect to the server because authorization failed.
     class AuthError < ConnectError; end
 
+    # When the no_echo option is used but the server does not support it.
+    class NoEchoNotSupported < ConnectError; end
+
     # When we cannot connect serverince there are no servers available.
     class NoServersError < ConnectError; end
 

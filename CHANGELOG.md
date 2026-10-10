@@ -2,6 +2,10 @@
 
 ## main
 
+### Added
+
+- `no_echo: true` stops the server from delivering a connection's own publishes to its subscriptions, like `NoEcho` of nats.go. A server that does not support it (protocol 0) makes connect raise `NATS::IO::NoEchoNotSupported`, a `ConnectError`.
+
 ## v2.7.0
 
 This release adds the JetStream features of nats-server 2.10 to 2.14 that the
