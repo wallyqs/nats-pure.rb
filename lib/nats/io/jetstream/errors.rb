@@ -94,6 +94,31 @@ module NATS
       # consumer, as creating it again failed.
       class OrderedConsumerNotCreated < Error; end
 
+      # When a batched direct get finds no message to get, like
+      # ErrNoMessages of orbit.go jetstreamext.
+      class NoMessages < Error
+        def initialize(msg = "nats: no messages")
+          super
+        end
+      end
+
+      # When the server answers a batched direct get with a single message,
+      # as servers before v2.11.0 do, like ErrBatchUnsupported of orbit.go
+      # jetstreamext.
+      class BatchUnsupported < Error
+        def initialize(msg = "nats: batch get not supported by server")
+          super
+        end
+      end
+
+      # When a message of a batched direct get lacks the headers of the
+      # stream, like ErrInvalidResponse of orbit.go jetstreamext.
+      class InvalidStreamResponse < Error
+        def initialize(msg = "nats: invalid stream response")
+          super
+        end
+      end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq

@@ -168,6 +168,16 @@ fast = js.new_fast_publisher(error_handler: ->(e) { warn e.message })
 fast.close.count # => 10000
 ```
 
+Streams with `allow_direct` serve batches of messages, without a consumer
+(nats-server 2.11), until the server ends the batch:
+
+```ruby
+js.add_stream(name: "orders", subjects: ["orders.>"], allow_direct: true)
+
+js.get_batch("orders", 100, seq: 10, subject: "orders.new", max_bytes: 1 << 20).each { |msg| puts msg.seq }
+js.get_last_msgs_for("orders", ["orders.new", "orders.paid"], up_to_seq: 500) { |msg| puts msg.data }
+```
+
 Streams and consumers can also be managed directly:
 
 ```ruby

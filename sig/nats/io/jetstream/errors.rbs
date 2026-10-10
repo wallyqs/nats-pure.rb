@@ -167,6 +167,18 @@ module NATS
       class ServerShutdown < NATS::JetStream::Error::APIError
       end
 
+      class NoMessages < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
+      class BatchUnsupported < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
+      class InvalidStreamResponse < NATS::JetStream::Error
+        def initialize: (?String msg) -> void
+      end
+
       class BatchClosed < NATS::JetStream::Error
         def initialize: (?String msg) -> void
       end

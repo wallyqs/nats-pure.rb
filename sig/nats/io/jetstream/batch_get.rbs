@@ -1,0 +1,13 @@
+module NATS
+  class JetStream
+    module Manager
+      NUM_PENDING_HEADER: String
+
+      def get_batch: (String stream, Integer batch, ?seq: Integer?, ?subject: String?, ?start_time: (Time | String)?, ?max_bytes: Integer?, ?timeout: Numeric?) -> Array[JetStream::API::RawStreamMsg]
+                   | (String stream, Integer batch, ?seq: Integer?, ?subject: String?, ?start_time: (Time | String)?, ?max_bytes: Integer?, ?timeout: Numeric?) { (JetStream::API::RawStreamMsg) -> void } -> nil
+
+      def get_last_msgs_for: (String stream, Array[String] | String subjects, ?up_to_seq: Integer?, ?up_to_time: (Time | String)?, ?batch: Integer?, ?timeout: Numeric?) -> Array[JetStream::API::RawStreamMsg]
+                           | (String stream, Array[String] | String subjects, ?up_to_seq: Integer?, ?up_to_time: (Time | String)?, ?batch: Integer?, ?timeout: Numeric?) { (JetStream::API::RawStreamMsg) -> void } -> nil
+    end
+  end
+end
