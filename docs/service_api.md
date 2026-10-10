@@ -88,6 +88,18 @@ client.request("hi")
 # {"greeting":"Hi!"}
 ```
 
+`respond`, `respond_json` and `respond_with_error` take `headers:` for the response.
+The response carries only those headers, not the headers of the request:
+
+```ruby
+service.endpoints.add("hi") do |message|
+  message.respond("Hi!", headers: {"Content-Language" => "en"})
+end
+
+client.request("hi").header
+# {"Content-Language"=>"en"}
+```
+
 You can also create multiple endpoints:
 
 ```ruby
@@ -231,6 +243,9 @@ end
 client.request("divide", [5, 0].to_json)
 # NATS::Msg(reply: "", data: "", header={"Nats-Service-Error"=>"It's impossible to divide by zero", "Nats-Service-Error-Code"=>"500"})
 ```
+
+Headers given to `respond_with_error` with `headers:` are added to the error headers,
+and can override them.
 
 ## Stats
 

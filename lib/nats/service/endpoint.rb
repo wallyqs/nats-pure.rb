@@ -24,35 +24,49 @@ module NATS
         @error = nil
       end
 
+      # Responds to the request, like Respond of nats.go micro. Unlike
+      # NATS::Msg#respond, the response carries only the given headers,
+      # not those of the request.
+      #
+      # @param data [String] The response payload.
+      # @param headers [Hash] Headers of the response, like WithHeaders
+      #   of nats.go micro.
+      def respond(data = "", headers: nil)
+        respond_msg(response(data, headers))
+      end
+
       # Responds with obj as JSON, like RespondJSON of nats.go micro.
       #
       # @param obj [Object] The response, generated with JSON.generate.
+      # @param headers [Hash] Headers of the response.
       # @raise [NATS::Service::MarshalResponseError] When obj cannot be
       #   generated as JSON, as for a NaN Float. Nothing is sent then.
-      def respond_json(obj)
+      def respond_json(obj, headers: nil)
         json = begin
           JSON.generate(obj)
         rescue => e
           raise MarshalResponseError, "marshaling response: #{e.message}"
         end
 
-        respond(json)
+        respond(json, headers: headers)
       end
 
-      def respond_with_error(error)
+      # Responds with a service error, like Error of nats.go micro.
+      #
+      # @param error [Exception, String, Hash] The error: an Exception or a
+      #   String is a 500, a Hash gives its :code, :description and :data.
+      # @param headers [Hash] Headers of the response, added to the error
+      #   headers, which they can override, like WithHeaders of nats.go micro.
+      def respond_with_error(error, headers: nil)
         @error = NATS::Service::ErrorWrapper.new(error)
 
-        message = dup
-        message.subject = reply
-        message.reply = ""
-        message.data = @error.data
-
-        message.header = {
+        header = {
           "Nats-Service-Error" => @error.message,
           "Nats-Service-Error-Code" => @error.code
         }
+        header.merge!(headers) if headers
 
-        respond_msg(message)
+        respond_msg(response(@error.data, header))
       end
 
       def inspect
@@ -73,6 +87,12 @@ module NATS
 
           request
         end
+      end
+
+      private
+
+      def response(data, header)
+        ::NATS::Msg.new(subject: reply, reply: "", data: data, header: header, nc: nc)
       end
     end
 

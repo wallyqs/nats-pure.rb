@@ -4,6 +4,7 @@
 
 ### Added
 
+- Services: `request.respond`, `respond_json` and `respond_with_error` take `headers:` for the response, like `WithHeaders` of nats.go micro; on an error response they are added to the error headers and can override them.
 - Services: `request.respond_json(obj)` responds with `obj` as JSON, like `RespondJSON` of nats.go micro. An object that cannot be generated as JSON raises `NATS::Service::MarshalResponseError` (`ErrMarshalResponse`), and nothing is sent.
 - Services: an error handler, set with the `error_handler:` option or `service.on_error`, receives the service and a `NATS::Service::NATSError` (`subject`, `description`) when one of the service's subscriptions fails, like a slow consumer or a NATS error raised in a handler, before the service stops, like `Config.ErrorHandler` and `NATSError` of nats.go micro. Services also stop when their connection is closed, as in nats.go.
 - Object Store, wire compatible with nats.go `jetstream` and the other clients: `js.create_object_store`, `update_object_store`, `create_or_update_object_store`, `object_store`, `delete_object_store`, `object_store_names` and `object_stores` manage stores (`ObjectStoreManager`), and `NATS::ObjectStore` has `put` (a String or an IO, with `ObjectMeta`), `put_string`, `put_file`, `get` (returning the data, or writing it to an `io:`, checked against its SHA-256 digest), `get_bytes`, `get_string`, `get_file`, `get_info`, `update_meta`, `delete`, `add_link`, `add_bucket_link`, `seal`, `watch`, `list` and `status`, raising the errors of nats.go as `NATS::ObjectStore::ObjectNotFoundError`, `DigestMismatchError`, `LinkNotAllowedError` and so on.
@@ -112,6 +113,7 @@
 
 ### Fixed
 
+- Services: `request.respond` and the `$SRV` monitoring responses no longer echo the headers and the reply subject of the request, like `Respond` of nats.go micro. A monitoring request without a reply subject is ignored, instead of failing the service.
 - KV: the entries of `kv.get` have a `delta` of 0, like nats.go, rather than `nil`, also with direct gets.
 - KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
 - KV: `create_key_value` dropped the `placement` of the bucket, so its stream was created without it. It now passes it on to the stream config, like `CreateKeyValue` of nats.go.

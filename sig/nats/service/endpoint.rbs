@@ -1,7 +1,11 @@
 module NATS
   class Service
     class Request < NATS::Msg
-      def respond_json: (untyped obj) -> void
+      def respond: (?String data, ?headers: Hash[String, untyped]?) -> void
+
+      def respond_json: (untyped obj, ?headers: Hash[String, untyped]?) -> void
+
+      def respond_with_error: (Exception | String | Hash[Symbol, untyped] error, ?headers: Hash[String, untyped]?) -> void
     end
 
     class Endpoint
