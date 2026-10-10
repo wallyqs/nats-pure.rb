@@ -168,6 +168,9 @@ module NATS
     end
 
     EXPECTED_LAST_SUBJECT_SEQUENCE = "Nats-Expected-Last-Subject-Sequence"
+    # The err_codes of a wrong last sequence: replicated streams report it as
+    # 10164 (JSStreamWrongLastSequenceConstantErr), others as 10071.
+    WRONG_LAST_SEQUENCE_ERR_CODES = [10071, 10164].freeze
 
     # update will update the value iff the latest revision matches.
     def update(key, value, params = {})
@@ -186,7 +189,7 @@ module NATS
       begin
         ack = @js.publish("#{@pre}#{key}", value, header: hdrs, ttl: ttl)
       rescue NATS::JetStream::Error::APIError => err
-        if err.err_code == 10071
+        if WRONG_LAST_SEQUENCE_ERR_CODES.include?(err.err_code)
           raise KeyWrongLastSequenceError.new(err.description)
         else
           raise err
