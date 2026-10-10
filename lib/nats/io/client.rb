@@ -1425,8 +1425,10 @@ module NATS
         jitter = @options[opt]
         raise ArgumentError, "nats: #{opt} must be a number of seconds >= 0" unless jitter.is_a?(Numeric) && jitter >= 0
       end
-      if @options[:custom_reconnect_delay] && !@options[:custom_reconnect_delay].respond_to?(:call)
-        raise ArgumentError, "nats: custom_reconnect_delay must respond to call"
+      %i[custom_reconnect_delay reconnect_to_server].each do |opt|
+        if @options[opt] && !@options[opt].respond_to?(:call)
+          raise ArgumentError, "nats: #{opt} must respond to call"
+        end
       end
 
       # Like nats.go, either static websocket headers or a handler.
@@ -1721,18 +1723,30 @@ module NATS
       msg
     end
 
-    def select_next_server
+    # Picks the server to connect to next. When reconnecting, that is the
+    # one that reconnect_to_server chooses, if any.
+    def select_next_server(reconnecting: false)
       raise NATS::IO::NoServersError.new("nats: No servers available") if server_pool.empty?
 
-      # Pick next from head of the list
-      srv = server_pool.shift
+      srv, delay = choose_reconnect_server if reconnecting && @options[:reconnect_to_server]
+      if srv
+        server_pool.delete_if { |s| s.equal?(srv) }
+      else
+        # Pick next from head of the list
+        srv = server_pool.shift
+      end
 
       # Track connection attempts to this server
       srv[:reconnect_attempts] ||= 0
       srv[:reconnect_attempts] += 1
 
-      # Back off in case we are reconnecting to it and have been connected
-      sleep reconnect_delay(srv) if should_delay_connect?(srv)
+      # Wait as long as reconnect_to_server said, or else back off in case
+      # we are reconnecting to it and have been connected.
+      if delay
+        sleep delay if delay > 0
+      elsif should_delay_connect?(srv)
+        sleep reconnect_delay(srv)
+      end
 
       # Set url of the server to which we would be connected
       @uri = srv[:uri]
@@ -1751,6 +1765,43 @@ module NATS
       return if uris.all? { |uri| %w[ws wss].include?(uri.scheme) == websocket }
 
       raise NATS::IO::MixingWebsocketSchemes, "nats: mixing of websocket and non websocket URLs is not allowed"
+    end
+
+    # Asks reconnect_to_server for the server to reconnect to, and the
+    # seconds to wait before, like ReconnectToServerCB of nats.go. It gets
+    # copies of the servers of the pool, which only has servers with
+    # reconnect attempts left, and the INFO of the last server. It may
+    # return one of those servers, or its URL. One that is not in the pool
+    # goes to on_reconnect_error and on_error as ServerNotInPool, and,
+    # like nil or an error that it raises, leaves the choice to the client.
+    def choose_reconnect_server
+      pool = server_pool.map { |srv| srv.merge(uri: srv[:uri].dup) }
+      choice, delay = @options[:reconnect_to_server].call(pool, @server_info.dup)
+      return nil if choice.nil?
+
+      uri = server_choice_uri(choice)
+      srv = uri && server_pool.find { |s| same_server?(s[:uri], uri) }
+      unless srv
+        e = NATS::IO::ServerNotInPool.new("nats: selected server is not in the pool")
+        err_cb_call(self, e, nil)
+        reconnect_error_cb_call(e)
+        return nil
+      end
+
+      [srv, (delay.is_a?(Numeric) && delay.positive?) ? delay : 0]
+    rescue => e
+      err_cb_call(self, e, nil)
+      nil
+    end
+
+    def server_choice_uri(choice)
+      case choice
+      when Hash then choice[:uri]
+      when URI then choice
+      else process_uri(choice.to_s).first
+      end
+    rescue URI::Error
+      nil
     end
 
     def server_using_secure_connection?
@@ -2402,7 +2453,7 @@ module NATS
       begin
         return if closed_since?(generation)
 
-        srv = select_next_server
+        srv = select_next_server(reconnecting: true)
 
         # Set hostname to use for TLS hostname verification
         if client_using_secure_connection? && single_url_connect_used?

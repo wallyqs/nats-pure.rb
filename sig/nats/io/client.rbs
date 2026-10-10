@@ -362,6 +362,10 @@ module NATS
 
     def reconnect_delay: (Hash[Symbol, untyped]?) -> Float
 
+    def choose_reconnect_server: () -> [Hash[Symbol, untyped], Numeric]?
+
+    def server_choice_uri: (untyped) -> URI::Generic?
+
     def parse_server_urls: (String | URI::Generic) -> Array[URI::Generic]
 
     def same_server?: (URI::Generic, URI::Generic) -> bool
