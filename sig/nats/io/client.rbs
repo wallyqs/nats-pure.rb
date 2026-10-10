@@ -182,9 +182,9 @@ module NATS
 
     def system_account?: () -> bool
 
-    def client_id: () -> Integer?
+    def client_id: () -> Integer
 
-    def client_ip: () -> String?
+    def client_ip: () -> IPAddr?
 
     def max_payload: () -> Integer?
 
