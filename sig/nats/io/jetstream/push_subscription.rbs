@@ -15,7 +15,11 @@ module NATS
 
       private
 
-      def start_control: (Numeric?) -> void
+      def start_control: (Numeric?, ?on_error: (^(Exception) -> void)?) -> void
+
+      def stop_control: () -> void
+
+      def js_report: (Exception) -> void
 
       def control_msg?: (NATS::Msg) -> bool
 

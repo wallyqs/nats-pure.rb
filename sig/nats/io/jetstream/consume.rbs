@@ -84,5 +84,23 @@ module NATS
 
       def report: (Exception) -> void
     end
+
+    class PushConsumeContext < ConsumeContext
+      def initialize: (NATS::JetStream, String, JetStream::API::ConsumerInfo, Hash[Symbol, untyped], ^(NATS::Msg) -> void) -> void
+
+      attr_reader opts: Hash[Symbol, untyped]
+
+      def messages_context: () -> nil
+
+      private
+
+      def closing!: (stopped: bool) -> bool
+
+      def deliver: (NATS::Msg) -> void
+
+      def control_error: (Exception) -> Exception
+
+      def closed!: () -> void
+    end
   end
 end

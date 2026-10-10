@@ -555,5 +555,128 @@ module NATS
         e
       end
     end
+
+    # PushConsumeContext runs the consumption of a push consumer, which
+    # passes each message that the consumer delivers to a block, like
+    # Consume of a PushConsumer of the nats.go jetstream package. It takes
+    # the control messages of the consumer as the subscriptions of
+    # {JetStream#subscribe} do: it answers the flow control requests, and,
+    # when the consumer has idle heartbeats, reports a
+    # NATS::JetStream::Error::NoHeartbeat whenever nothing came for two of
+    # them. As in nats.go, the messages are not acked for the block. See
+    # {PushConsumer#consume}.
+    #
+    # @!visibility public
+    class PushConsumeContext < ConsumeContext
+      # @param js [NATS::JetStream] The context of the consumer.
+      # @param stream [String] Name of the stream of the consumer.
+      # @param info [JetStream::API::ConsumerInfo] Info of the consumer.
+      # @!visibility private
+      def initialize(js, stream, info, params, handler)
+        @handler = handler
+        @error_handler = params[:error_handler]
+        unless @error_handler.nil? || @error_handler.respond_to?(:call)
+          raise ArgumentError.new("nats: invalid error_handler #{@error_handler.inspect}, expected a callable")
+        end
+
+        @opts = params.slice(:error_handler)
+        @nc = js.nc
+        @done = false
+        @closing = false
+        @stopped = false
+        @lock = Monitor.new
+        @done_cond = @lock.new_cond
+        config = info.config
+        @sub = @nc.subscribe(config.deliver_subject, queue: config.deliver_group) { |msg| deliver(msg) }
+        @sub.on_close { |_| closed! }
+        @sub.extend(PushSubscription)
+        @sub.jsi = JS::Sub.new(js: js, stream: stream, consumer: info.name)
+        @sub.send(:start_control, config.idle_heartbeat, on_error: ->(err) { report(control_error(err)) })
+      end
+
+      # The options given.
+      # @return [Hash]
+      attr_reader :opts
+
+      # stop unsubscribes, and stops passing messages to the block, once
+      # it returns, if it runs. The messages already received are dropped,
+      # and the server delivers them again after the ack_wait of the
+      # consumer.
+      def stop
+        return unless closing!(stopped: true)
+
+        @sub.unsubscribe
+      rescue NATS::IO::Error
+        # The connection closed, which closed the subscription too.
+      end
+
+      # drain unsubscribes, and passes the messages already received to the
+      # block before it stops.
+      def drain
+        return unless closing!(stopped: false)
+
+        @sub.drain
+      rescue NATS::IO::Error
+        # The connection closed, which closed the subscription too.
+      end
+
+      # @!visibility private
+      def messages_context
+        nil
+      end
+
+      private
+
+      # closing! marks the consumption as stopping, once, and stops checking
+      # for heartbeats, which no longer come.
+      def closing!(stopped:)
+        @lock.synchronize do
+          return false if @closing
+
+          @closing = true
+          @stopped = stopped
+        end
+        @sub.send(:stop_control)
+        true
+      end
+
+      # deliver passes a message to the block, unless stopped, and deals
+      # with the statuses of the consumer as nats.go does: a deleted
+      # consumer stops the consumption.
+      def deliver(msg)
+        return if @lock.synchronize { @stopped }
+
+        if JS.is_status_msg(msg)
+          return unless msg.header[JS::Header::Status] == JS::Status::Conflict
+
+          err = JS.from_msg(msg)
+          report(err)
+          stop if err.is_a?(Error::ConsumerDeleted)
+          return
+        end
+
+        @handler.call(msg)
+      rescue => e
+        report(e)
+      end
+
+      # control_error is the error to report for one of the subscription:
+      # its consumer not being active means that the heartbeats stopped.
+      def control_error(err)
+        return err unless err.is_a?(Error::ConsumerNotActive)
+
+        Error::NoHeartbeat.new("nats: no heartbeat received")
+      end
+
+      # closed! is called once the subscription is closed: unsubscribed,
+      # drained, or closed with the connection.
+      def closed!
+        @sub.send(:stop_control)
+        @lock.synchronize do
+          @done = true
+          @done_cond.broadcast
+        end
+      end
+    end
   end
 end

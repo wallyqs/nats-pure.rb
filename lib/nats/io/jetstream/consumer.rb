@@ -141,7 +141,15 @@ module NATS
     # js.push_consumer and the push consumer methods of a {Stream} return.
     # It keeps the info of the consumer from when it was got, or last
     # refreshed with info, as cached_info. Its messages are read with
-    # {JetStream#subscribe}.
+    # consume, or with {JetStream#subscribe}.
+    #
+    # @example Consume the messages of a push consumer.
+    #
+    #   consumer = js.push_consumer("ORDERS", "dispatcher")
+    #   cc = consumer.consume(error_handler: ->(err) { warn err }) do |msg|
+    #     msg.ack
+    #   end
+    #   cc.stop
     #
     # @!visibility public
     class PushConsumer
@@ -157,6 +165,8 @@ module NATS
         @stream = stream
         @name = info.name
         @info = info
+        @lock = Mutex.new
+        @consuming = nil
       end
 
       # info gets the current info of the consumer, and caches it.
@@ -172,6 +182,36 @@ module NATS
       # @return [JetStream::API::ConsumerInfo]
       def cached_info
         @info
+      end
+
+      # consume subscribes to the deliver subject of the consumer, in its
+      # deliver group if it has one, and passes each message it delivers to
+      # the block, like Consume of a PushConsumer of nats.go. It answers the
+      # flow control requests of the consumer, and reports a NoHeartbeat
+      # when the consumer has idle heartbeats and nothing came for two of
+      # them. The block acks the messages, as the consumer needs. A handle
+      # consumes once at a time, as in nats.go: until the consumption
+      # stopped, consume raises ConsumerAlreadyConsuming.
+      #
+      # @param params [Hash] Options to customize the consumption.
+      # @option params [Proc] :error_handler Called with the errors met while
+      #   consuming, like ConsumeErrHandler of nats.go: missing heartbeats, a
+      #   deleted consumer, which stops the consumption, and those raised by
+      #   the block; the error callback of the connection by default.
+      # @yieldparam msg [NATS::Msg]
+      # @return [NATS::JetStream::PushConsumeContext]
+      # @raise [NATS::JetStream::Error::ConsumerAlreadyConsuming] When the
+      #   handle is consuming already.
+      def consume(params = {}, &handler)
+        raise ArgumentError.new("nats: handler cannot be empty") unless handler
+
+        @lock.synchronize do
+          if @consuming && !@consuming.closed?
+            raise Error::ConsumerAlreadyConsuming.new("nats: consumer is already consuming")
+          end
+
+          @consuming = PushConsumeContext.new(@js, @stream, @info, params, handler)
+        end
       end
     end
   end

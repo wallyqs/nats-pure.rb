@@ -141,6 +141,9 @@ module NATS
       class MsgIteratorClosed < NATS::JetStream::Error
       end
 
+      class ConsumerAlreadyConsuming < NATS::JetStream::Error
+      end
+
       class OrderedConsumerUsedAsFetch < NATS::JetStream::Error
       end
 
