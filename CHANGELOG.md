@@ -4,6 +4,7 @@
 
 ### Added
 
+- Reconnect tuning like nats.go: `reconnect_jitter:` and `reconnect_jitter_tls:` (`ReconnectJitter`) add a random delay of up to that many seconds, by default 0.1 and 1 (for TLS), to each wait of `reconnect_time_wait` before reconnecting to a server, and `custom_reconnect_delay:` (`CustomReconnectDelay`), a Proc given the attempts made so far, returns the seconds to wait instead.
 - `connect_timeout` also bounds the TCP dial and the TLS handshake, like `Timeout` of nats.go; the dial always took up to 2 seconds (`DEFAULT_CONNECT_TIMEOUT`) and the handshake had no limit. Both raise `NATS::IO::SocketTimeoutError` when it is up.
 - `no_echo: true` stops the server from delivering a connection's own publishes to its subscriptions, like `NoEcho` of nats.go. A server that does not support it (protocol 0) makes connect raise `NATS::IO::NoEchoNotSupported`, a `ConnectError`.
 

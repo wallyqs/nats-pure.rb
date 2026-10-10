@@ -330,6 +330,8 @@ module NATS
       opts[:old_style_request] = false if opts[:old_style_request].nil?
       opts[:ignore_discovered_urls] = false if opts[:ignore_discovered_urls].nil?
       opts[:reconnect_time_wait] = NATS::IO::RECONNECT_TIME_WAIT if opts[:reconnect_time_wait].nil?
+      opts[:reconnect_jitter] = NATS::IO::RECONNECT_JITTER if opts[:reconnect_jitter].nil?
+      opts[:reconnect_jitter_tls] = NATS::IO::RECONNECT_JITTER_TLS if opts[:reconnect_jitter_tls].nil?
       opts[:max_reconnect_attempts] = NATS::IO::MAX_RECONNECT_ATTEMPTS if opts[:max_reconnect_attempts].nil?
       opts[:ping_interval] = NATS::IO::DEFAULT_PING_INTERVAL if opts[:ping_interval].nil?
       opts[:max_outstanding_pings] = NATS::IO::DEFAULT_PING_MAX if opts[:max_outstanding_pings].nil?
@@ -453,7 +455,7 @@ module NATS
 
         # Always sleep here to safe guard against errors before current[:was_connected]
         # is set for the first time.
-        sleep @options[:reconnect_time_wait] if @options[:reconnect_time_wait]
+        sleep reconnect_delay(srv)
 
         # Continue retrying until there are no options left in the server pool
         retry
@@ -872,6 +874,14 @@ module NATS
     private
 
     def validate_settings!
+      %i[reconnect_jitter reconnect_jitter_tls].each do |opt|
+        jitter = @options[opt]
+        raise ArgumentError, "nats: #{opt} must be a number of seconds >= 0" unless jitter.is_a?(Numeric) && jitter >= 0
+      end
+      if @options[:custom_reconnect_delay] && !@options[:custom_reconnect_delay].respond_to?(:call)
+        raise ArgumentError, "nats: custom_reconnect_delay must respond to call"
+      end
+
       raise(NATS::IO::ClientError, "custom inbox may not include '>'") if @inbox_prefix.include?(">")
       raise(NATS::IO::ClientError, "custom inbox may not include '*'") if @inbox_prefix.include?("*")
       raise(NATS::IO::ClientError, "custom inbox may not end in '.'") if @inbox_prefix.end_with?(".")
@@ -1078,7 +1088,7 @@ module NATS
       srv[:reconnect_attempts] += 1
 
       # Back off in case we are reconnecting to it and have been connected
-      sleep @options[:reconnect_time_wait] if should_delay_connect?(srv)
+      sleep reconnect_delay(srv) if should_delay_connect?(srv)
 
       # Set url of the server to which we would be connected
       @uri = srv[:uri]
@@ -1791,6 +1801,23 @@ module NATS
       server[:reconnect_attempts] <= @options[:max_reconnect_attempts]
     end
 
+    # Seconds to wait before the next attempt to connect to server: what
+    # custom_reconnect_delay returns for the attempts made to it so far, or
+    # else reconnect_time_wait plus a random jitter of up to reconnect_jitter
+    # (reconnect_jitter_tls for TLS connections).
+    def reconnect_delay(server)
+      attempts = server ? server[:reconnect_attempts].to_i : 0
+      if (cb = @options[:custom_reconnect_delay])
+        return [cb.call(attempts).to_f, 0].max
+      end
+
+      secure = @tls || (server && %w[tls wss].include?(server[:uri].scheme))
+      jitter = secure ? @options[:reconnect_jitter_tls] : @options[:reconnect_jitter]
+      wait = @options[:reconnect_time_wait].to_f
+      wait += rand * jitter if jitter > 0
+      wait
+    end
+
     def should_delay_connect?(server)
       server[:was_connected] && server[:reconnect_attempts] >= 0
     end
@@ -1938,6 +1965,10 @@ module NATS
 
     MAX_RECONNECT_ATTEMPTS = 10
     RECONNECT_TIME_WAIT = 2
+
+    # Upper bounds of the random delay added to reconnect_time_wait, in seconds.
+    RECONNECT_JITTER = 0.1
+    RECONNECT_JITTER_TLS = 1
 
     # Maximum accumulated pending commands bytesize before forcing a flush.
     MAX_PENDING_SIZE = 32768
