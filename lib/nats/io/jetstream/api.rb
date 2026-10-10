@@ -455,13 +455,52 @@ module NATS
       #   @return [Integer]
       # @!attribute consumer_count
       #   @return [Integer]
+      # @!attribute deleted
+      #   Sequences of the messages deleted from within the stream, with
+      #   the deleted_details option of stream_info only.
+      #   @return [Array<Integer>, nil]
+      # @!attribute num_deleted
+      #   Number of messages deleted from within the stream, which leave
+      #   gaps between its first and last sequence; nil for none.
+      #   @return [Integer, nil]
+      # @!attribute num_subjects
+      #   Number of subjects that the stream has messages on; nil for none.
+      #   @return [Integer, nil]
+      # @!attribute subjects
+      #   Number of messages of each subject that matches the
+      #   subjects_filter option of stream_info, by subject.
+      #   @return [Hash{String => Integer}, nil]
+      # @!attribute lost
+      #   Messages the server lost from the storage of the stream, as when
+      #   its files were corrupt.
+      #   @return [LostStreamData, nil]
       StreamState = Struct.new(:messages, :bytes, :first_seq, :first_ts,
         :last_seq, :last_ts, :consumer_count,
+        :deleted, :num_deleted, :num_subjects, :subjects, :lost,
         keyword_init: true) do
+        def initialize(opts = {})
+          # The subjects are keys of a JSON object, which come as Symbols.
+          opts[:subjects] = opts[:subjects].transform_keys(&:to_s) if opts[:subjects]
+          opts[:lost] = LostStreamData.new(opts[:lost]) if opts[:lost].is_a?(Hash)
+          rem = opts.keys - members
+          opts.delete_if { |k| rem.include?(k) }
+          super
+        end
+      end
+
+      # LostStreamData are the messages that the server lost from the
+      # storage of a stream.
+      #
+      # @!attribute msgs
+      #   @return [Array<Integer>] Sequences of the messages lost.
+      # @!attribute bytes
+      #   @return [Integer] Bytes lost.
+      LostStreamData = Struct.new(:msgs, :bytes, keyword_init: true) do
         def initialize(opts = {})
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
+          freeze
         end
       end
 
