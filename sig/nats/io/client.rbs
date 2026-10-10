@@ -45,6 +45,8 @@ module NATS
     SUB_OP: 'SUB'
     EMPTY_MSG: ''
 
+    REDACTED: String
+
     SERVER_ERRORS: Hash[String, singleton(NATS::IO::Error)]
 
     INSTANCES: ObjectSpace::WeakMap
@@ -144,6 +146,52 @@ module NATS
 
     def new_inbox: () -> String
 
+    def connected_url_redacted: () -> String?
+
+    def connected_addr: () -> String?
+
+    def local_addr: () -> String?
+
+    def num_subscriptions: () -> Integer
+
+    def buffered: () -> Integer
+
+    def connected_server_id: () -> String?
+
+    def connected_server_name: () -> String?
+
+    def connected_server_version: () -> String?
+
+    def connected_cluster_name: () -> String?
+
+    def client_id: () -> Integer?
+
+    def client_ip: () -> String?
+
+    def max_payload: () -> Integer?
+
+    def headers_supported?: () -> bool
+
+    def auth_required?: () -> bool
+
+    def tls_required?: () -> bool
+
+    def jetstream?: () -> bool
+
+    def error_handler: () -> Proc?
+
+    def disconnect_handler: () -> Proc?
+
+    def reconnect_handler: () -> Proc?
+
+    def close_handler: () -> Proc?
+
+    def connect_handler: () -> Proc?
+
+    def discovered_servers_handler: () -> Proc?
+
+    def lame_duck_mode_handler: () -> Proc?
+
     def connected?: () -> bool
 
     def connecting?: () -> bool
@@ -177,6 +225,12 @@ module NATS
     alias jsm jetstream
 
     private
+
+    def connected_server_info: (Symbol) -> untyped
+
+    def server_info_unless_closed: (Symbol) -> untyped
+
+    def socket_address: (Symbol) -> String?
 
     def validate_auth_options!: () -> void
 
@@ -329,7 +383,13 @@ module NATS
 
       def closed?: () -> bool
 
+      def remote_address: () -> String
+
+      def local_address: () -> String
+
       private
+
+      def raw_socket: () -> ::Socket
 
       def tls_handshake: (OpenSSL::SSL::SSLSocket) -> void
 
