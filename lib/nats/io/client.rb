@@ -329,6 +329,9 @@ module NATS
       # Service API
       @_services = nil
 
+      # Internal listeners of connection events, see add_status_listener.
+      @status_listeners = []
+
       # Prepare for calling connect or automatic delayed connection
       parse_and_validate_options if uri || opts.any?
 
@@ -2141,6 +2144,30 @@ module NATS
       @subs.delete(sid)
     end
 
+    # Registers a listener that parts of the library, like JetStream
+    # contexts and services, use to learn about connection events without
+    # replacing the callbacks of the user. It is called with :disconnect
+    # when the connection is lost and starts to reconnect, and with :close
+    # once the connection is closed, in the thread of the event. What it
+    # raises goes to on_error. Returns the listener, for
+    # remove_status_listener.
+    def add_status_listener(&listener)
+      synchronize { @status_listeners << listener }
+      listener
+    end
+
+    def remove_status_listener(listener)
+      synchronize { @status_listeners.delete(listener) }
+    end
+
+    def notify_status_listeners(event)
+      synchronize { @status_listeners.dup }.each do |listener|
+        listener.call(event)
+      rescue => e
+        err_cb_call(self, e, nil)
+      end
+    end
+
     # Calls a connection event callback, handing what it raises to on_error,
     # so that it does not break the thread that calls it.
     def async_cb_call(cb)
@@ -2508,6 +2535,7 @@ module NATS
         reconnect_error_cb_call(@last_err) if @last_err
       else
         @disconnect_cb&.call(@last_err)
+        notify_status_listeners(:disconnect)
       end
 
       # Clear sticky error
@@ -2690,7 +2718,13 @@ module NATS
         end
       end
 
-      closed_subs&.each { |sub| sub.send(:closed!, wait: false) } if do_cbs
+      return unless do_cbs
+
+      # Like nats.go, JetStream contexts fail the acks they wait for once
+      # their connection is closed.
+      notify_status_listeners(:close)
+
+      closed_subs&.each { |sub| sub.send(:closed!, wait: false) }
     end
 
     # Asks the read loop, flusher and ping threads to stop, wakes them from

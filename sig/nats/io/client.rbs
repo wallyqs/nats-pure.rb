@@ -126,6 +126,8 @@ module NATS
 
     @drain_t: Thread?
 
+    @status_listeners: Array[Proc]
+
     @reloader: Proc
 
     def self.default_reloader: -> Proc
@@ -323,6 +325,12 @@ module NATS
     def send_flush_queue: (Symbol) -> void
 
     def delete_sid: (Symbol) -> void
+
+    def add_status_listener: () { (Symbol) -> void } -> Proc
+
+    def remove_status_listener: (Proc) -> Proc?
+
+    def notify_status_listeners: (Symbol) -> void
 
     def async_cb_call: (Proc?) -> void
 
