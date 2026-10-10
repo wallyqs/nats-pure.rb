@@ -158,6 +158,58 @@ module NATS
         request_msg_delete(stream, {seq: seq}, params)
       end
 
+      # stream_names lists the names of the streams, like StreamNames of
+      # nats.go, requesting as many pages as the server has.
+      # @param params [Hash] Options to customize API request.
+      # @option params [String] :subject List only the streams that take
+      #   messages on this subject, which may have wildcards, like
+      #   WithStreamListSubject of nats.go.
+      # @option params [Float] :timeout Time to wait for the response to each page.
+      # @return [Array<String>] The names of the streams.
+      def stream_names(params = {})
+        paged_request("#{@prefix}.STREAM.NAMES", :streams, {subject: params[:subject]}, params)
+      end
+
+      # streams lists the info of the streams, like Streams of nats.go,
+      # requesting as many pages as the server has.
+      # @param params [Hash] Options to customize API request.
+      # @option params [String] :subject List only the streams that take
+      #   messages on this subject, which may have wildcards, like
+      #   WithStreamListSubject of nats.go.
+      # @option params [Float] :timeout Time to wait for the response to each page.
+      # @return [Array<JetStream::API::StreamInfo>] The info of the streams.
+      def streams(params = {})
+        paged_request("#{@prefix}.STREAM.LIST", :streams, {subject: params[:subject]}, params).map do |info|
+          JetStream::API::StreamInfo.new(info)
+        end
+      end
+
+      # consumer_names lists the names of the consumers of a stream, like
+      # ConsumerNames of nats.go, requesting as many pages as the server has.
+      # @param stream [String] Name of the stream.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for the response to each page.
+      # @return [Array<String>] The names of the consumers.
+      def consumer_names(stream, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+
+        paged_request("#{@prefix}.CONSUMER.NAMES.#{stream}", :consumers, {}, params)
+      end
+
+      # consumers lists the info of the consumers of a stream, like
+      # Consumers of nats.go, requesting as many pages as the server has.
+      # @param stream [String] Name of the stream.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for the response to each page.
+      # @return [Array<JetStream::API::ConsumerInfo>] The info of the consumers.
+      def consumers(stream, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+
+        paged_request("#{@prefix}.CONSUMER.LIST.#{stream}", :consumers, {}, params).map do |info|
+          JetStream::API::ConsumerInfo.new(info)
+        end
+      end
+
       # add_consumer creates a consumer with a given config, or updates the
       # consumer if one with the same name already exists.
       # @param stream [String] Name of the stream.
@@ -472,6 +524,22 @@ module NATS
         raise JetStream::Error::MsgDeleteUnsuccessful.new("nats: message deletion unsuccessful") unless result[:success]
 
         true
+      end
+
+      # paged_request requests the pages of a list from the server, from
+      # offset 0 on, until it has as many entries as the server says there
+      # are in total, as the listers of nats.go do, and returns the entries
+      # under key from all the pages.
+      def paged_request(req_subject, key, req, params)
+        entries = []
+        loop do
+          result = api_request(req_subject, req.merge(offset: entries.size).compact.to_json, timeout: params[:timeout])
+          page = result[key] || []
+          entries.concat(page)
+          # A page that adds nothing would be requested again for good.
+          break if page.empty? || entries.size >= result[:total].to_i
+        end
+        entries
       end
 
       # request_pause sends a consumer pause request, which resumes the
