@@ -74,6 +74,10 @@ module NATS
       # them, as when the server is gone or the consumer was deleted.
       class NoHeartbeat < Error; end
 
+      # When the messages of a MessagesContext are read after it was stopped
+      # or drained, or the connection closed.
+      class MsgIteratorClosed < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
@@ -246,6 +250,15 @@ module NATS
         def initialize(params = {})
           super
           @code ||= 423
+        end
+      end
+
+      # When the server ended a pull as its consumer was deleted.
+      # This condition is represented with a message that has 409 status code header.
+      class ConsumerDeleted < APIError
+        def initialize(params = {})
+          super
+          @code ||= 409
         end
       end
 

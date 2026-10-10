@@ -191,6 +191,72 @@ module NATS
         msgs
       end
 
+      # consume pulls the messages of the consumer continuously, and passes
+      # each to the block, in a thread of its own, like Consume of the nats.go
+      # jetstream package. It keeps up to max_messages (or max_bytes) asked
+      # for, and pulls for more once fewer than the threshold remain, with
+      # pulls of its own, apart from those of fetch. Each pull expires after
+      # expires seconds; the server sends idle heartbeats to it, and when
+      # they stop, as when the server is gone, or after a reconnect, it
+      # pulls again.
+      #
+      # @example Ack each message as it comes.
+      #
+      #   cc = psub.consume(max_messages: 100) do |msg|
+      #     process(msg)
+      #     msg.ack
+      #   end
+      #   # Later on.
+      #   cc.drain
+      #
+      # @param params [Hash] Options to customize the consumption.
+      # @option params [Integer] :max_messages Most messages to keep asked for, 500 by default.
+      # @option params [Integer] :max_bytes Most bytes to keep asked for instead, as
+      #   the server counts them: the subject, reply, header and data of each message.
+      #   Not with :max_messages.
+      # @option params [Float] :expires Seconds after which each pull expires, at
+      #   least 1, 30 by default.
+      # @option params [Float] :heartbeat Seconds between the idle heartbeats of the
+      #   pulls, from 0.5 to 30 and at most half of :expires; half of :expires by
+      #   default, up to 30. Two missed heartbeats report NoHeartbeat, and pull again.
+      # @option params [Integer] :threshold_messages Pull again once fewer messages
+      #   than this remain asked for, half of :max_messages by default.
+      # @option params [Integer] :threshold_bytes Pull again once fewer bytes than
+      #   this remain asked for, half of :max_bytes by default.
+      # @option params [#call] :error_handler Called with the errors met, in the thread
+      #   of the consumption: NATS::JetStream::Error::NoHeartbeat, statuses of the
+      #   server such as PinIdMismatch, errors raised by the block, and those that
+      #   stop the consumption: ConsumerDeleted, an APIError for an invalid pull, and
+      #   NATS::IO::ConnectionClosedError. By default, the error callback of the
+      #   connection gets them.
+      # @option params [String] :group, :min_pending, :min_ack_pending, :priority As of {#fetch}.
+      # @yieldparam msg [NATS::Msg] Each message, as it comes.
+      # @return [NATS::JetStream::ConsumeContext]
+      # @raise [ArgumentError] When there is no block, or an option is invalid.
+      def consume(params = {}, &block)
+        raise ArgumentError.new("nats: consume needs a block") unless block
+
+        ConsumeContext.new(self, params, block)
+      end
+
+      # messages returns an iterator over the messages of the consumer,
+      # which it pulls continuously, like Messages of the nats.go jetstream
+      # package. It pulls as consume does, while next waits for messages.
+      #
+      # @example Take the messages one at a time.
+      #
+      #   msgs = psub.messages
+      #   msg = msgs.next(timeout: 5)
+      #   msg.ack
+      #   msgs.stop
+      #
+      # @param params [Hash] The options of {#consume}, but :error_handler.
+      # @return [NATS::JetStream::MessagesContext]
+      # @raise [ArgumentError] When an option is invalid.
+      def messages(params = {})
+        MessagesContext.new(self, params)
+      end
+
       # consumer_info retrieves the current status of the pull subscription consumer.
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.

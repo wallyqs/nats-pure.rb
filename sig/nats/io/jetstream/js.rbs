@@ -18,7 +18,7 @@ module NATS
 
       def self.check_503_error: (NATS::Msg) -> void
 
-      def self.from_msg: (NATS::Msg) -> (NATS::JetStream::API::Error | NATS::JetStream::Error::PinIdMismatch | NATS::JetStream::Error::MaxBytesExceeded)
+      def self.from_msg: (NATS::Msg) -> (NATS::JetStream::API::Error | NATS::JetStream::Error::PinIdMismatch | NATS::JetStream::Error::MaxBytesExceeded | NATS::JetStream::Error::ConsumerDeleted)
 
       def self.max_bytes_exceeded?: (NATS::Msg) -> bool
 

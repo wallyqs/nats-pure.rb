@@ -49,6 +49,9 @@ module NATS
       class NoHeartbeat < NATS::JetStream::Error
       end
 
+      class MsgIteratorClosed < NATS::JetStream::Error
+      end
+
       class APIError < NATS::JetStream::Error
         attr_reader code: Integer
         attr_reader err_code: Integer
@@ -153,6 +156,9 @@ module NATS
       end
 
       class PinIdMismatch < NATS::JetStream::Error::APIError
+      end
+
+      class ConsumerDeleted < NATS::JetStream::Error::APIError
       end
 
       class MaxBytesExceeded < NATS::JetStream::Error::APIError

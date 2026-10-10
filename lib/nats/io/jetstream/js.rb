@@ -127,6 +127,9 @@ module NATS
           desc = msg.header[JS::Header::Desc]
           return ::NATS::JetStream::Error::PinIdMismatch.new({description: desc}) if code == Status::PinIdMismatch
           return ::NATS::JetStream::Error::MaxBytesExceeded.new({description: desc}) if max_bytes_exceeded?(msg)
+          if code == Status::Conflict && desc.to_s.downcase.include?("consumer deleted")
+            return ::NATS::JetStream::Error::ConsumerDeleted.new({description: desc})
+          end
 
           klass = if code == Status::Conflict
             # Matched as nats.go matches them, by what the description has.
