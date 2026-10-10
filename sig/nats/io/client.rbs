@@ -393,6 +393,7 @@ module NATS
       @read_timeout: Numeric
       @tls: Hash[Symbol, untyped]?
       @dialer: untyped
+      @skip_host_lookup: bool?
 
       def connect: () -> void
 
@@ -419,6 +420,8 @@ module NATS
       def connect_addrinfo: (String | Integer, Integer, Numeric) -> ::Socket
 
       def skip_tls_handshake?: () -> bool
+
+      def dial_host: () -> void
 
       def dial_custom: () -> void
     end

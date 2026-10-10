@@ -2441,7 +2441,8 @@ module NATS
         headers: @options[:ws_headers],
         headers_handler: @options[:ws_headers_handler],
         proxy_path: @options[:proxy_path],
-        dialer: @options[:custom_dialer]
+        dialer: @options[:custom_dialer],
+        skip_host_lookup: @options[:skip_host_lookup]
       )
     end
 
@@ -2705,10 +2706,12 @@ module NATS
         @socket = nil
         @tls = options[:tls]
         @dialer = options[:dialer]
+        @skip_host_lookup = options[:skip_host_lookup]
       end
 
       def connect
         return dial_custom if @dialer
+        return dial_host if @skip_host_lookup
 
         addrinfo = ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM)
         addrinfo.each_with_index do |ai, i|
@@ -2843,14 +2846,27 @@ module NATS
         @dialer.respond_to?(:skip_tls_handshake?) && @dialer.skip_tls_handshake?
       end
 
+      # With skip_host_lookup, connects to the host name as it is, like
+      # nats.go, leaving it to the system to resolve and pick an address.
+      def dial_host
+        @socket = ::Socket.tcp(@uri.hostname, @uri.port, connect_timeout: @connect_timeout)
+        @socket.setsockopt(::Socket::IPPROTO_TCP, ::Socket::TCP_NODELAY, 1)
+      rescue Errno::ETIMEDOUT
+        raise NATS::IO::SocketTimeoutError, "nats: timeout dialing #{@uri.hostname}:#{@uri.port}"
+      end
+
       # Connects with the custom dialer, like nats.go: to each address the
       # host name resolves to in turn, or to the host name itself when it
-      # does not resolve, until one connects.
+      # does not resolve or with skip_host_lookup, until one connects.
       def dial_custom
-        hosts = begin
-          ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM).map { |ai| ai[3] }.uniq
-        rescue SocketError
+        hosts = if @skip_host_lookup
           []
+        else
+          begin
+            ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM).map { |ai| ai[3] }.uniq
+          rescue SocketError
+            []
+          end
         end
         hosts = [@uri.hostname] if hosts.empty?
 
