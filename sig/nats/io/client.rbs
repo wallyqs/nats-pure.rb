@@ -178,6 +178,10 @@ module NATS
 
     def connected_cluster_name: () -> String?
 
+    def connected_domain: () -> String?
+
+    def system_account?: () -> bool
+
     def client_id: () -> Integer?
 
     def client_ip: () -> String?
