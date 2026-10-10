@@ -170,9 +170,6 @@ module NATS
       class PinIdMismatch < NATS::JetStream::Error::APIError
       end
 
-      class ConsumerDeleted < NATS::JetStream::Error::APIError
-      end
-
       class MaxBytesExceeded < NATS::JetStream::Error::APIError
       end
     end
