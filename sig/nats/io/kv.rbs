@@ -3,6 +3,16 @@ module NATS
     KV_OP: 'KV-Operation'
     KV_DEL: 'DEL'
     KV_PURGE: 'PURGE'
+    KV_PUT: 'PUT'
+
+    module Operation
+      PUT: 'PUT'
+      DELETE: 'DEL'
+      PURGE: 'PURGE'
+    end
+
+    ALL_KEYS: '>'
+    KEY_VALUE_MAX_HISTORY: 64
     MSG_ROLLUP_SUBJECT: 'sub'
     MSG_ROLLUP_ALL: 'all'
     ROLLUP: 'Nats-Rollup'

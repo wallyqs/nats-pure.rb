@@ -491,7 +491,7 @@ describe "KeyValue" do
     expect(e.key).to eql("t.name")
     expect(e.value).to eql("b")
     expect(e.revision).to eql(10)
-    expect(e.operation).to eql(nil)
+    expect(e.operation).to eql("PUT")
 
     e = w.updates
     expect(e.bucket).to eql("WATCH")
@@ -499,7 +499,7 @@ describe "KeyValue" do
     expect(e.key).to eql("t.age")
     expect(e.value).to eql("d")
     expect(e.revision).to eql(12)
-    expect(e.operation).to eql(nil)
+    expect(e.operation).to eql("PUT")
 
     e = w.updates
     expect(e.bucket).to eql("WATCH")
@@ -507,7 +507,7 @@ describe "KeyValue" do
     expect(e.key).to eql("t.a")
     expect(e.value).to eql("a")
     expect(e.revision).to eql(13)
-    expect(e.operation).to eql(nil)
+    expect(e.operation).to eql("PUT")
 
     # Consume next pending update.
     e = w.updates
@@ -516,7 +516,7 @@ describe "KeyValue" do
     expect(e.key).to eql("t.b")
     expect(e.value).to eql("b")
     expect(e.revision).to eql(14)
-    expect(e.operation).to eql(nil)
+    expect(e.operation).to eql("PUT")
 
     # There are no more updates so client will be sent a marker to signal
     # that there are no more updates.

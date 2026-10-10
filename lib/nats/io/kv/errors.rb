@@ -120,7 +120,7 @@ module NATS
     # When history is too large.
     class KeyHistoryTooLargeError < Error
       def to_s
-        "nats: history limited to a max of 64"
+        "nats: history limited to a max of #{KEY_VALUE_MAX_HISTORY}"
       end
     end
 

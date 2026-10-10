@@ -144,7 +144,7 @@ module NATS
           config.ttl = config.ttl * ::NATS::NANOSECONDS
         end
 
-        if config.history > 64
+        if config.history > KeyValue::KEY_VALUE_MAX_HISTORY
           raise NATS::KeyValue::KeyHistoryTooLargeError
         end
 
