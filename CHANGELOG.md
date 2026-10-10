@@ -109,6 +109,7 @@
 
 ### Fixed
 
+- KV: the entries of `kv.get` have a `delta` of 0, like nats.go, rather than `nil`, also with direct gets.
 - KV: `create` and `update` raised the server's `APIError` instead of `KeyWrongLastSequenceError` for the conflicts of replicated (R>1) buckets, which the server reports with err_code 10164 rather than 10071, so `create` could not recreate a deleted key. Both codes are now taken for a wrong last revision, like nats.go.
 - KV: `create_key_value` dropped the `placement` of the bucket, so its stream was created without it. It now passes it on to the stream config, like `CreateKeyValue` of nats.go.
 - JetStream: the futures of `js.publish_async` that await their acks did not end when the connection was lost or closed, so that `wait` without a timeout and `publish_async_complete` waited for good. Like nats.go, they now fail with `NATS::IO::Disconnected` (`ErrDisconnected`) once the connection is lost, and with `NATS::IO::ConnectionClosedError` once it is closed, calling `publish_async_err_handler`, without replacing the `on_disconnect` and `on_close` callbacks of the connection. After a close, the next `publish_async` subscribes to the acks again.
