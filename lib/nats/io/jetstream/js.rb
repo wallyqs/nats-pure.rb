@@ -47,6 +47,7 @@ module NATS
         10059 => ::NATS::JetStream::Error::StreamNotFound,
         10071 => ::NATS::JetStream::Error::WrongLastSequence,
         10076 => ::NATS::JetStream::Error::JetStreamNotEnabled,
+        10105 => ::NATS::JetStream::Error::ConsumerExistingActive,
         10136 => ::NATS::JetStream::Error::DuplicateFilterSubjects,
         10138 => ::NATS::JetStream::Error::OverlappingFilterSubjects,
         10139 => ::NATS::JetStream::Error::EmptyFilter,
