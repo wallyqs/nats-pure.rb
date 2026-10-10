@@ -5,6 +5,18 @@ module NATS
 
     class ServerError < NATS::IO::Error
     end
+
+    class PermissionViolation < NATS::IO::ServerError
+    end
+
+    class MaxSubscriptionsExceeded < NATS::IO::ServerError
+    end
+
+    class MaxConnectionsExceeded < NATS::IO::ServerError
+    end
+
+    class MaxAccountConnectionsExceeded < NATS::IO::ServerError
+    end
     
     class ClientError < NATS::IO::Error
     end
@@ -12,10 +24,43 @@ module NATS
     class ReconnectBufExceeded < NATS::IO::ClientError
     end
 
+    class MaxPayload < NATS::IO::ClientError
+    end
+
+    class BadQueueName < NATS::IO::ClientError
+    end
+
+    class HeadersNotSupported < NATS::IO::ClientError
+    end
+
+    class ConnectionReconnecting < NATS::IO::ClientError
+    end
+
     class ConnectError < NATS::IO::Error
     end
 
     class AuthError < NATS::IO::ConnectError
+    end
+
+    class AuthorizationViolation < NATS::IO::AuthError
+    end
+
+    class AuthenticationExpired < NATS::IO::AuthError
+    end
+
+    class AuthenticationRevoked < NATS::IO::AuthError
+    end
+
+    class AccountAuthenticationExpired < NATS::IO::AuthError
+    end
+
+    class NoInfoReceived < NATS::IO::ConnectError
+    end
+
+    class SecureConnRequired < NATS::IO::ConnectError
+    end
+
+    class SecureConnWanted < NATS::IO::ConnectError
     end
 
     class NoEchoNotSupported < NATS::IO::ConnectError
@@ -34,6 +79,9 @@ module NATS
     end
 
     class SocketTimeoutError < NATS::IO::Timeout
+    end
+
+    class BadTimeout < NATS::IO::Timeout
     end
 
     class BadSubject < NATS::IO::Error

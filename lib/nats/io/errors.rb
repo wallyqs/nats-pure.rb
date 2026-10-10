@@ -21,8 +21,35 @@ module NATS
     # When the NATS server sends us an 'ERR' message.
     class ServerError < Error; end
 
+    # When the server refuses a publish or a subscription that the
+    # permissions of the user do not allow. The connection stays up.
+    class PermissionViolation < ServerError; end
+
+    # When the server refuses a subscription as the account or user has
+    # as many as it may have. The connection stays up.
+    class MaxSubscriptionsExceeded < ServerError; end
+
+    # When the server refuses the connection as it has as many as it may have.
+    class MaxConnectionsExceeded < ServerError; end
+
+    # When the server refuses the connection as the account has as many as
+    # it may have.
+    class MaxAccountConnectionsExceeded < ServerError; end
+
     # When we detect error on the client side.
     class ClientError < Error; end
+
+    # When a message is larger than the max_payload of the server.
+    class MaxPayload < ClientError; end
+
+    # When a queue group name is not valid.
+    class BadQueueName < ClientError; end
+
+    # When a message has headers, which the server does not support.
+    class HeadersNotSupported < ClientError; end
+
+    # When a connection cannot do what was asked while it reconnects.
+    class ConnectionReconnecting < ClientError; end
 
     # When a publish while reconnecting would exceed the reconnect buffer.
     class ReconnectBufExceeded < ClientError; end
@@ -32,6 +59,27 @@ module NATS
 
     # When we cannot connect to the server because authorization failed.
     class AuthError < ConnectError; end
+
+    # When the server refuses the credentials of the connection.
+    class AuthorizationViolation < AuthError; end
+
+    # When the user JWT of the connection expired.
+    class AuthenticationExpired < AuthError; end
+
+    # When the user JWT of the connection was revoked.
+    class AuthenticationRevoked < AuthError; end
+
+    # When the account JWT of the connection expired.
+    class AccountAuthenticationExpired < AuthError; end
+
+    # When the server does not start with the INFO protocol.
+    class NoInfoReceived < ConnectError; end
+
+    # When the server requires TLS, but the client does not use it.
+    class SecureConnRequired < ConnectError; end
+
+    # When the client wants TLS, but the server does not support it.
+    class SecureConnWanted < ConnectError; end
 
     # When the no_echo option is used but the server does not support it.
     class NoEchoNotSupported < ConnectError; end
@@ -47,6 +95,9 @@ module NATS
 
     # When we do not get a result within a specified time.
     class Timeout < Error; end
+
+    # When a timeout is not a positive number of seconds.
+    class BadTimeout < Timeout; end
 
     # When there is an i/o timeout with the socket.
     class SocketTimeoutError < Timeout; end
