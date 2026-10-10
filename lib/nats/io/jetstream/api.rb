@@ -820,9 +820,25 @@ module NATS
         end
       end
 
-      RawStreamMsg = Struct.new(:subject, :seq, :data, :headers, keyword_init: true) do
+      # RawStreamMsg is a message stored in a stream, as get_msg returns it.
+      #
+      # @!attribute subject
+      #   @return [String]
+      # @!attribute seq
+      #   @return [Integer] The stream sequence of the message.
+      # @!attribute data
+      #   @return [String]
+      # @!attribute headers
+      #   The headers of the message, a String, or an Array of Strings for a
+      #   name it has more than once; a direct get also has the headers of
+      #   the server, such as Nats-Stream, Nats-Sequence and Nats-Time-Stamp.
+      #   @return [Hash, nil]
+      # @!attribute time
+      #   @return [Time] When the message was stored, like Time of nats.go.
+      RawStreamMsg = Struct.new(:subject, :seq, :data, :headers, :time, keyword_init: true) do
         def initialize(opts)
           opts[:data] = Base64.decode64(opts[:data]) if opts[:data]
+          opts[:time] = JS.parse_time(opts[:time]) if opts[:time].is_a?(String)
           if opts[:hdrs]
             header = Base64.decode64(opts[:hdrs])
             hdr = {}

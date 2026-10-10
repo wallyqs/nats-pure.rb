@@ -451,6 +451,7 @@ module NATS
       # @option seq [Integer] Sequence number of a message.
       # @option subject [String] Subject of the message.
       # @option direct [Boolean] Use direct mode to for faster access (requires NATS v2.9.0)
+      # @return [JetStream::API::RawStreamMsg] The message, with its sequence and time.
       def get_msg(stream_name, params = {})
         req = {}
         if params[:next]
@@ -690,12 +691,12 @@ module NATS
             raise JS.from_msg(msg)
           end
         end
-        subject = msg.header["Nats-Subject"]
-        seq = msg.header["Nats-Sequence"]
+        # The server sends what STREAM.MSG.GET has in the body as headers.
         raw_msg = JetStream::API::RawStreamMsg.new(
-          subject: subject,
-          seq: seq,
-          headers: msg.header
+          subject: msg.header["Nats-Subject"],
+          seq: msg.header["Nats-Sequence"]&.to_i,
+          headers: msg.header,
+          time: msg.header[JetStream::Header::TIME_STAMP]
         )
         raw_msg.data = msg.data
 
