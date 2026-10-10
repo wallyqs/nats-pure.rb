@@ -74,6 +74,11 @@ module NATS
       # them, as when the server is gone or the consumer was deleted.
       class NoHeartbeat < Error; end
 
+      # When a push consumer with idle heartbeats sent nothing for two of
+      # them, as when the server is gone or the consumer was deleted,
+      # reported to the error callback of the connection.
+      class ConsumerNotActive < Error; end
+
       # When the messages of a MessagesContext are read after it was stopped
       # or drained, or the connection closed.
       class MsgIteratorClosed < Error; end
