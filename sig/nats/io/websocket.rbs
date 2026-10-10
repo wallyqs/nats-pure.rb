@@ -1,0 +1,90 @@
+module NATS
+  module IO
+    class WebSocket < Socket
+      class HandshakeError < RuntimeError
+      end
+
+      class FrameError < RuntimeError
+      end
+
+      CONTINUATION_FRAME: 0
+      TEXT_FRAME: 1
+      BINARY_FRAME: 2
+      CLOSE_FRAME: 8
+      PING_FRAME: 9
+      PONG_FRAME: 10
+
+      FINAL_BIT: Integer
+      RSV1_BIT: Integer
+      MASK_BIT: Integer
+      MAX_CONTROL_PAYLOAD_SIZE: 125
+
+      GUID: String
+
+      PMC_EXTENSION: String
+      PMC_SERVER_NO_CONTEXT: String
+      PMC_CLIENT_NO_CONTEXT: String
+      PMC_REQUEST: String
+      DEFLATE_TAIL: String
+
+      MAX_HANDSHAKE_RESPONSE_SIZE: Integer
+
+      @compression: bool?
+      @compressed: bool
+      @handshaked: bool
+      @rbuf: String
+      @line_buf: String?
+      @cbuf: String?
+      @write_lock: Thread::Mutex
+      @inflater: Zlib::Inflate?
+      @deflater: Zlib::Deflate?
+      @fragmented: bool?
+      @message_compressed: bool?
+      @close_received: bool?
+
+      def initialize: (?Hash[Symbol, untyped]) -> void
+
+      def compressed?: () -> bool
+
+      def connect: () -> void
+
+      def setup_tls!: () -> void
+
+      def read: (?Integer, ?Numeric?) -> String?
+
+      def read_line: (?Numeric?) -> String?
+
+      def write: (String, ?Numeric?) -> void
+
+      private
+
+      def raw_read: (Integer, Numeric?) -> String?
+
+      def raw_write: (String, ?Numeric?) -> void
+
+      def handshake: () -> void
+
+      def request_path: () -> String
+
+      def read_handshake_response: () -> [Integer, Hash[String, Array[String]]]
+
+      def pmc_support: (Array[String]?) -> [bool, bool]
+
+      def read_frames: (Integer, Numeric?) -> String?
+
+      def decode_frames: () -> String
+
+      def handle_frame: (Integer, String, String) -> void
+
+      def take_payload: (String, bool, String) -> void
+
+      def inflate: (String) -> String
+
+      def deflate: (String) -> String
+
+      def write_frame: (Integer, String, ?Numeric?, ?compress: bool) -> void
+
+      def mask: (String, String) -> String
+    end
+  end
+end
