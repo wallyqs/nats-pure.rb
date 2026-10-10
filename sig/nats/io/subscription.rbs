@@ -68,6 +68,8 @@ module NATS
     @max_pending_bytes: Integer
     @closed_cb: Proc?
 
+    def check_next_msg!: () -> void
+
     def pending_queue_max: () -> Integer
 
     def pending_limits_reached?: () -> bool

@@ -30,6 +30,15 @@ module NATS
     class SyncSubRequired < NATS::IO::ClientError
     end
 
+    class BadHeaderMsg < NATS::IO::ClientError
+    end
+
+    class MsgNotBound < NATS::IO::ClientError
+    end
+
+    class InvalidMsg < TypeError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 
@@ -93,7 +102,13 @@ module NATS
     class BadSubject < NATS::IO::Error
     end
 
+    class MsgNoReply < NATS::IO::BadSubject
+    end
+
     class BadSubscription < NATS::IO::Error
+    end
+
+    class MaxMessages < NATS::IO::BadSubscription
     end
 
     class SlowConsumer < NATS::IO::Error

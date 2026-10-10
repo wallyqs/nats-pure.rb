@@ -44,6 +44,7 @@ module NATS
     PING_REQUEST: String
     PONG_RESPONSE: String
 
+    NATS_HDR_VERSION: String
     NATS_HDR_LINE: String
     STATUS_MSG_LEN: 3
     STATUS_HDR: 'Status'

@@ -94,8 +94,11 @@ module NATS
     # Responds to the message with data, published to its reply subject,
     # like Respond of nats.go: without the headers of the message.
     # @param data [String] The data of the response.
+    # @raise [NATS::IO::MsgNotBound] When the message did not come from a
+    #   connection.
+    # @raise [NATS::IO::MsgNoReply] When the message has no reply subject.
     def respond(data = "")
-      return unless @nc
+      check_respond!
 
       @nc.publish(reply, data)
     end
@@ -104,9 +107,13 @@ module NATS
     # RespondMsg of nats.go: msg is published to the reply subject of the
     # message, which becomes its subject.
     # @param msg [NATS::Msg] The response.
+    # @raise [NATS::IO::InvalidMsg] When msg is not a NATS::Msg.
+    # @raise [NATS::IO::MsgNotBound] When the message did not come from a
+    #   connection.
+    # @raise [NATS::IO::MsgNoReply] When the message has no reply subject.
     def respond_msg(msg)
-      return unless @nc
-      raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
+      raise NATS::IO::InvalidMsg, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
+      check_respond!
 
       msg.subject = reply
       @nc.publish_msg(msg)
@@ -120,6 +127,11 @@ module NATS
     end
 
     private
+
+    def check_respond!
+      raise NATS::IO::MsgNotBound, "nats: message is not bound to subscription/connection" unless @nc
+      raise NATS::IO::MsgNoReply, "nats: message does not have a reply" if reply.to_s.empty?
+    end
 
     # Called by the client with the size of a received message.
     attr_writer :wire_size
