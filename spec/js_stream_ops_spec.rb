@@ -91,4 +91,36 @@ describe "JetStream stream operations" do
       end.to raise_error(NATS::JetStream::Error::InvalidStreamName)
     end
   end
+
+  describe "delete_msg" do
+    before do
+      nc.jsm.add_stream(name: "DEL", subjects: ["del.>"])
+      publish_numbered(["del.a"], 3)
+    end
+
+    [:delete_msg, :secure_delete_msg].each do |method|
+      it "#{method} deletes a message" do
+        expect(nc.jsm.public_send(method, "DEL", 2)).to eql(true)
+
+        state = nc.jsm.stream_info("DEL").state
+        expect(state.messages).to eql(2)
+        expect(nc.jsm.get_msg("DEL", seq: 1).data).to eql("msg-0")
+        expect(nc.jsm.get_msg("DEL", seq: 3).data).to eql("msg-2")
+        expect do
+          nc.jsm.get_msg("DEL", seq: 2)
+        end.to raise_error(NATS::JetStream::Error::NotFound)
+      end
+
+      it "#{method} raises for a message that is not stored" do
+        nc.jsm.public_send(method, "DEL", 2)
+        expect do
+          nc.jsm.public_send(method, "DEL", 2)
+        end.to raise_error(NATS::JetStream::Error::BadRequest)
+
+        expect do
+          nc.jsm.public_send(method, "MISSING", 1)
+        end.to raise_error(NATS::JetStream::Error::StreamNotFound)
+      end
+    end
+  end
 end

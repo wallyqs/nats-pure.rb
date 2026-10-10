@@ -136,6 +136,28 @@ module NATS
         JetStream::API::StreamPurgeResponse.new(result)
       end
 
+      # delete_msg deletes a message from a stream, marking it as erased
+      # without overwriting its data, like DeleteMsg of nats.go.
+      # @param stream [String] Name of the stream.
+      # @param seq [Integer] Sequence of the message.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [Boolean]
+      def delete_msg(stream, seq, params = {})
+        request_msg_delete(stream, {seq: seq, no_erase: true}, params)
+      end
+
+      # secure_delete_msg deletes a message from a stream, overwriting its
+      # data, like SecureDeleteMsg of nats.go.
+      # @param stream [String] Name of the stream.
+      # @param seq [Integer] Sequence of the message.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [Boolean]
+      def secure_delete_msg(stream, seq, params = {})
+        request_msg_delete(stream, {seq: seq}, params)
+      end
+
       # add_consumer creates a consumer with a given config, or updates the
       # consumer if one with the same name already exists.
       # @param stream [String] Name of the stream.
@@ -438,6 +460,18 @@ module NATS
 
         result = api_request(req_subject, req.to_json, params)
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # request_msg_delete sends a message delete request. A deletion the
+      # server does not confirm raises MsgDeleteUnsuccessful.
+      def request_msg_delete(stream, req, params)
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+
+        req_subject = "#{@prefix}.STREAM.MSG.DELETE.#{stream}"
+        result = api_request(req_subject, req.to_json, timeout: params[:timeout])
+        raise JetStream::Error::MsgDeleteUnsuccessful.new("nats: message deletion unsuccessful") unless result[:success]
+
+        true
       end
 
       # request_pause sends a consumer pause request, which resumes the

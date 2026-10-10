@@ -40,6 +40,9 @@ module NATS
       # When the consumer name is invalid.
       class InvalidConsumerName < Error; end
 
+      # When the server does not confirm that it deleted a message.
+      class MsgDeleteUnsuccessful < Error; end
+
       # When the server responds with an error from the JetStream API.
       class APIError < Error
         attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
