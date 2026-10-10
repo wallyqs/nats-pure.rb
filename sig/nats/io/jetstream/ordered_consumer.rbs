@@ -9,7 +9,7 @@ module NATS
 
       def initialize: (NATS::JetStream, String, ?Hash[Symbol, untyped]) -> void
 
-      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> NATS::JetStream::MessageBatch
 
       def next: (?Hash[Symbol, untyped]) -> NATS::Msg
 

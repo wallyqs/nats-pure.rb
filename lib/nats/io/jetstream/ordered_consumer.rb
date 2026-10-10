@@ -81,7 +81,7 @@ module NATS
       # @param batch [Integer] Number of messages to pull.
       # @param params [Hash] Options of {PullSubscription#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
-      # @return [Array<NATS::Msg>]
+      # @return [NATS::JetStream::MessageBatch] With the error of the fetch, if any.
       # @raise [NATS::JetStream::Error::OrderedConsumerUsedAsConsume] When it was
       #   read with consume or messages.
       # @raise [NATS::JetStream::Error::OrderedConsumerConcurrentRequests] When
@@ -99,15 +99,16 @@ module NATS
           # A fetch tries once: the next fetch tries again.
           reset_consumer(1) if @used || @psub.nil?
           @used = true
-          taken = []
+          taken = MessageBatch.new
           gap = false
-          @psub.fetch(batch, params) do |msg|
+          fetched = @psub.fetch(batch, params) do |msg|
             next if gap
             next gap = true unless accept(msg) == :ok
 
             taken << msg
             block&.call(msg)
           end
+          taken.error = fetched.error
           taken
         ensure
           @lock.synchronize { @fetching = false }

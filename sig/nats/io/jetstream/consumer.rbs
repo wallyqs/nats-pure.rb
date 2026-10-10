@@ -11,11 +11,11 @@ module NATS
 
       def cached_info: () -> JetStream::API::ConsumerInfo
 
-      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+      def fetch: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> NATS::JetStream::MessageBatch
 
-      def fetch_bytes: (Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+      def fetch_bytes: (Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> NATS::JetStream::MessageBatch
 
-      def fetch_no_wait: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
+      def fetch_no_wait: (?Integer, ?Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> NATS::JetStream::MessageBatch
 
       def next: (?Hash[Symbol, untyped]) -> NATS::Msg
 
