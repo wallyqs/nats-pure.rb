@@ -328,8 +328,8 @@ module NATS
         end
 
         threshold = params[:inactive_threshold]
-        if threshold && !(threshold.is_a?(Integer) && threshold >= 1)
-          raise ArgumentError.new("nats: inactive_threshold should be whole seconds, at least 1")
+        if threshold && !(threshold.is_a?(Numeric) && threshold.real? && threshold.finite? && threshold.positive?)
+          raise ArgumentError.new("nats: inactive_threshold should be a positive number of seconds")
         end
 
         attempts = params[:max_reset_attempts] || 0

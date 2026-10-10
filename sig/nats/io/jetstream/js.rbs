@@ -12,6 +12,10 @@ module NATS
       # class << self
       def self.next_req_to_json: (Hash[Symbol, untyped]) -> String
 
+      def self.nanoseconds: (Numeric, String) -> Integer
+
+      def self.seconds: (Integer?) -> (Integer | Float)?
+
       def self.parse_time: (String?) -> Time?
 
       def self.is_status_msg: (NATS::Msg) -> bool

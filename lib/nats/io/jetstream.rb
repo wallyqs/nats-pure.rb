@@ -500,8 +500,8 @@ module NATS
     # @option params [Integer] :opt_start_seq Stream sequence to start at, with "by_start_sequence".
     # @option params [Time, String] :opt_start_time Time to start at, with "by_start_time".
     # @option params [String] :replay_policy "instant" (the default) or "original".
-    # @option params [Integer] :inactive_threshold Seconds after which the server deletes
-    #   the consumer when unused, 300 by default.
+    # @option params [Integer, Float] :inactive_threshold Seconds after which the server
+    #   deletes the consumer when unused, 300 by default.
     # @option params [Boolean] :headers_only Deliver the headers of the messages only,
     #   with their size in a Nats-Msg-Size header.
     # @option params [Hash] :metadata Metadata of the consumer.

@@ -84,6 +84,26 @@ module NATS
           req.to_json
         end
 
+        # nanoseconds converts a duration in seconds, an Integer or a Float,
+        # into the nanoseconds that the server takes, rounded to the nearest.
+        # @raise [ArgumentError] When it is not a finite number.
+        def nanoseconds(seconds, name)
+          unless seconds.is_a?(Numeric) && seconds.real? && seconds.finite?
+            raise ArgumentError.new("nats: invalid #{name}")
+          end
+
+          (seconds.to_r * ::NATS::NANOSECONDS).round
+        end
+
+        # seconds converts a duration in nanoseconds from the server into
+        # seconds: an Integer when whole, else a Float.
+        def seconds(nanos)
+          return if nanos.nil?
+          return nanos / ::NATS::NANOSECONDS if (nanos % ::NATS::NANOSECONDS).zero?
+
+          nanos.fdiv(::NATS::NANOSECONDS)
+        end
+
         # parse_time parses a time from the server, which sends Go's zero
         # time for a time that is not set.
         def parse_time(time)

@@ -905,10 +905,14 @@ describe "JetStream" do
         end
       end
 
-      it "requires the priority timeout in whole seconds" do
+      it "takes the priority timeout in seconds, fractions too" do
+        info = js.create_consumer("PRIO", durable_name: "c",
+          priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 1.5)
+        expect(info.config.priority_timeout).to eql(1.5)
+
         expect do
-          js.create_consumer("PRIO", durable_name: "c",
-            priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 1.5)
+          js.create_consumer("PRIO", durable_name: "d",
+            priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: "1")
         end.to raise_error(ArgumentError)
       end
 
