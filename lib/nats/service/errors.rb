@@ -12,6 +12,18 @@ module NATS
 
     class InvalidSubjectError < Error; end
 
+    # When control_subject is given a verb other than :ping, :info and
+    # :stats, like ErrVerbNotSupported of nats.go micro.
+    class VerbNotSupportedError < Error; end
+
+    # When control_subject is given a service id without a name, like
+    # ErrServiceNameRequired of nats.go micro.
+    class ServiceNameRequiredError < Error
+      def initialize(msg = "service name is required to generate ID control subject")
+        super
+      end
+    end
+
     # When respond_json cannot generate its response as JSON, like
     # ErrMarshalResponse of nats.go micro.
     class MarshalResponseError < Error; end

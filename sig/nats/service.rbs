@@ -1,5 +1,11 @@
 module NATS
   class Service
+    API_PREFIX: String
+    ERROR_HEADER: String
+    ERROR_CODE_HEADER: String
+
+    def self.control_subject: (Symbol | String verb, ?String? name, ?String? id) -> String
+
     def on_error: () { (NATS::Service, NATS::Service::NATSError) -> void } -> void
 
     def stopped?: () -> bool

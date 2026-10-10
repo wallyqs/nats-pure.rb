@@ -4,6 +4,7 @@
 
 ### Added
 
+- Services: `NATS::Service.control_subject(verb, name = nil, id = nil)` builds the `$SRV` subject to ping, or get the info or stats of, services, like `ControlSubject` of nats.go micro, raising `NATS::Service::VerbNotSupportedError` or `ServiceNameRequiredError` like `ErrVerbNotSupported` and `ErrServiceNameRequired`. `NATS::Service::ERROR_HEADER` and `ERROR_CODE_HEADER` name the error headers, like `ErrorHeader` and `ErrorCodeHeader`.
 - Services: `request.respond`, `respond_json` and `respond_with_error` take `headers:` for the response, like `WithHeaders` of nats.go micro; on an error response they are added to the error headers and can override them.
 - Services: `request.respond_json(obj)` responds with `obj` as JSON, like `RespondJSON` of nats.go micro. An object that cannot be generated as JSON raises `NATS::Service::MarshalResponseError` (`ErrMarshalResponse`), and nothing is sent.
 - Services: an error handler, set with the `error_handler:` option or `service.on_error`, receives the service and a `NATS::Service::NATSError` (`subject`, `description`) when one of the service's subscriptions fails, like a slow consumer or a NATS error raised in a handler, before the service stops, like `Config.ErrorHandler` and `NATSError` of nats.go micro. Services also stop when their connection is closed, as in nats.go.

@@ -215,7 +215,8 @@ Errors on subscriptions that are not the service's are left to the client.
 ## Error Handling
 
 If an error occurs in an endpoint, the service will communicate request errors 
-back to the client with the headers `Nats-Service-Error` and `Nats-Service-Error-Code`:
+back to the client with the headers `Nats-Service-Error` and `Nats-Service-Error-Code`,
+named by `NATS::Service::ERROR_HEADER` and `NATS::Service::ERROR_CODE_HEADER`:
 
 ```ruby
 service.endpoints.add("divide") do |message|
@@ -323,6 +324,16 @@ Each of those operations can be performed on three subjects:
 - `$SRV.PING|STATS|INFO` - pings and retrieves status for all services 
 - `$SRV.PING|STATS|INFO.<name>` - pings or retrieves status for all services having the specified name 
 - `$SRV.PING|STATS|INFO.<name>.<id>` - pings or retrieves status of a particular service instance
+
+`NATS::Service.control_subject(verb, name = nil, id = nil)` builds these subjects, for the
+verbs `:ping`, `:info` and `:stats`. Another verb raises `NATS::Service::VerbNotSupportedError`,
+and an id without a name raises `NATS::Service::ServiceNameRequiredError`:
+
+```ruby
+NATS::Service.control_subject(:ping)                    # "$SRV.PING"
+NATS::Service.control_subject(:info, "calc")            # "$SRV.INFO.calc"
+NATS::Service.control_subject(:stats, "calc", service.id)
+```
 
 ```ruby
 service = client.services.add(
