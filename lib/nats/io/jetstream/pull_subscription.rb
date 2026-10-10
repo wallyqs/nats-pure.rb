@@ -238,9 +238,10 @@ module NATS
       # @option params [String] :group, :min_pending, :min_ack_pending, :priority As of {#fetch}.
       # @yieldparam msg [NATS::Msg] Each message, as it comes.
       # @return [NATS::JetStream::ConsumeContext]
-      # @raise [ArgumentError] When there is no block, or an option is invalid.
+      # @raise [NATS::JetStream::Error::HandlerRequired] When there is no block.
+      # @raise [ArgumentError] When an option is invalid.
       def consume(params = {}, &block)
-        raise ArgumentError.new("nats: consume needs a block") unless block
+        raise Error::HandlerRequired unless block
 
         ConsumeContext.new(MessagesContext.new(self, params), @nc, params, block)
       end

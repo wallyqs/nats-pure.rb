@@ -113,6 +113,7 @@ module NATS
       # @param params [Hash] Options of {PullSubscription#consume}.
       # @yieldparam msg [NATS::Msg]
       # @return [NATS::JetStream::ConsumeContext]
+      # @raise [NATS::JetStream::Error::HandlerRequired] When there is no block.
       def consume(params = {}, &block)
         psub.consume(params, &block)
       end
@@ -200,10 +201,11 @@ module NATS
       #   the block; the error callback of the connection by default.
       # @yieldparam msg [NATS::Msg]
       # @return [NATS::JetStream::PushConsumeContext]
+      # @raise [NATS::JetStream::Error::HandlerRequired] When there is no block.
       # @raise [NATS::JetStream::Error::ConsumerAlreadyConsuming] When the
       #   handle is consuming already.
       def consume(params = {}, &handler)
-        raise ArgumentError.new("nats: handler cannot be empty") unless handler
+        raise Error::HandlerRequired unless handler
 
         @lock.synchronize do
           if @consuming && !@consuming.closed?
