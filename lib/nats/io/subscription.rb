@@ -30,7 +30,7 @@ module NATS
 
     attr_accessor :subject, :queue, :future, :callback, :response, :received, :max, :pending, :sid
     attr_accessor :pending_queue, :pending_size, :wait_for_msgs_cond
-    attr_accessor :pending_msgs_limit, :pending_bytes_limit
+    attr_reader :pending_msgs_limit, :pending_bytes_limit
     attr_accessor :nc
     attr_accessor :jsi
     attr_accessor :closed, :drained
@@ -53,6 +53,24 @@ module NATS
         @block.call
       rescue => e
         @nc.send(:err_cb_call, @nc, e, nil)
+      end
+    end
+
+    # The max of the pending queue for pending limits that are negative,
+    # which do not limit.
+    UNLIMITED_PENDING = 1 << 62
+    private_constant :UNLIMITED_PENDING
+
+    class << self
+      # @private
+      # Checks pending limits like SetPendingLimits of nats.go: zero is
+      # not allowed, and a negative limit does not limit.
+      def check_pending_limits!(msgs_limit, bytes_limit)
+        [msgs_limit, bytes_limit].each do |limit|
+          next if limit.is_a?(Integer) && !limit.zero?
+
+          raise ArgumentError, "nats: invalid argument: pending limits must be non-zero Integers"
+        end
       end
     end
 
@@ -114,6 +132,55 @@ module NATS
 
     def concurrency_semaphore
       @concurrency_semaphore ||= Concurrent::Semaphore.new(@processing_concurrency)
+    end
+
+    # Sets the most messages that may be pending, also once subscribed; a
+    # negative limit does not limit. See set_pending_limits.
+    def pending_msgs_limit=(limit)
+      Subscription.check_pending_limits!(limit, 1)
+      synchronize do
+        @pending_msgs_limit = limit
+        @pending_queue&.max = pending_queue_max
+      end
+    end
+
+    # Sets the most bytes that may be pending, also once subscribed; a
+    # negative limit does not limit. See set_pending_limits.
+    def pending_bytes_limit=(limit)
+      Subscription.check_pending_limits!(1, limit)
+      synchronize { @pending_bytes_limit = limit }
+    end
+
+    # The most messages and bytes that may be pending for the subscription,
+    # like PendingLimits of nats.go; a negative limit does not limit.
+    # @return [Array(Integer, Integer)] The messages and the bytes.
+    # @raise [NATS::IO::BadSubscription] When the subscription is closed.
+    def pending_limits
+      synchronize do
+        raise NATS::IO::BadSubscription.new("nats: invalid subscription") if @closed
+
+        [@pending_msgs_limit, @pending_bytes_limit]
+      end
+    end
+
+    # Sets the most messages and bytes that may be pending for the
+    # subscription, like SetPendingLimits of nats.go. Messages that come
+    # beyond them are dropped, as for a slow consumer. They take effect at
+    # once, also when lower than the messages already pending, which stay.
+    # @param msgs_limit [Integer] The messages, negative to not limit them.
+    # @param bytes_limit [Integer] The bytes, negative to not limit them.
+    # @raise [ArgumentError] When a limit is zero, like ErrInvalidArg.
+    # @raise [NATS::IO::BadSubscription] When the subscription is closed.
+    def set_pending_limits(msgs_limit, bytes_limit)
+      Subscription.check_pending_limits!(msgs_limit, bytes_limit)
+      synchronize do
+        raise NATS::IO::BadSubscription.new("nats: invalid subscription") if @closed
+
+        @pending_msgs_limit = msgs_limit
+        @pending_bytes_limit = bytes_limit
+        @pending_queue&.max = pending_queue_max
+      end
+      nil
     end
 
     # Auto unsubscribes the server by sending UNSUB command and throws away
@@ -271,6 +338,19 @@ module NATS
     end
 
     private
+
+    # The max of the pending queue: the messages limit, unless it does not
+    # limit. The lock is held.
+    def pending_queue_max
+      @pending_msgs_limit.positive? ? @pending_msgs_limit : UNLIMITED_PENDING
+    end
+
+    # Whether as many messages or bytes are pending as the limits allow, so
+    # that a message that comes is dropped. The lock is held.
+    def pending_limits_reached?
+      (@pending_msgs_limit.positive? && @pending_queue.size >= @pending_msgs_limit) ||
+        (@pending_bytes_limit.positive? && @pending_size >= @pending_bytes_limit)
+    end
 
     # Called by the client for a message it dropped. The lock is held.
     def dropped!

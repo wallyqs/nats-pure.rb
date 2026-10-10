@@ -623,6 +623,10 @@ module NATS
       raise NATS::IO::BadSubject.new("nats: invalid subject") if subj.empty? || subj.match?(/[ \t\r\n]/)
       raise NATS::IO::BadQueueName.new("nats: invalid queue name") if opts[:queue].to_s.match?(/[ \t\r\n]/)
 
+      opts[:pending_msgs_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
+      opts[:pending_bytes_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_BYTES_LIMIT
+      Subscription.check_pending_limits!(opts[:pending_msgs_limit], opts[:pending_bytes_limit])
+
       sid = nil
       sub = nil
       synchronize do
@@ -631,8 +635,6 @@ module NATS
         sub.nc = self
         sub.sid = sid
       end
-      opts[:pending_msgs_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
-      opts[:pending_bytes_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_BYTES_LIMIT
 
       sub.subject = subject
       sub.callback = callback
@@ -641,7 +643,7 @@ module NATS
       sub.max = opts[:max] if opts[:max]
       sub.pending_msgs_limit = opts[:pending_msgs_limit]
       sub.pending_bytes_limit = opts[:pending_bytes_limit]
-      sub.pending_queue = SizedQueue.new(sub.pending_msgs_limit)
+      sub.pending_queue = SizedQueue.new(sub.send(:pending_queue_max))
       sub.processing_concurrency = opts[:processing_concurrency] if opts.key?(:processing_concurrency)
 
       send_command("SUB #{subject} #{opts[:queue]} #{sid}#{CR_LF}")
@@ -1499,8 +1501,7 @@ module NATS
         elsif sub.pending_queue
           # Async subscribers use a sized queue for processing
           # and should be able to consume messages in parallel.
-          if (sub.pending_queue.size >= sub.pending_msgs_limit) \
-            || (sub.pending_size >= sub.pending_bytes_limit)
+          if sub.send(:pending_limits_reached?)
             err = NATS::IO::SlowConsumer.new("nats: slow consumer, messages dropped")
             sub.send(:dropped!)
           else

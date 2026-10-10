@@ -25,6 +25,14 @@ module NATS
     attr_accessor pending_msgs_limit: Integer?
     attr_accessor pending_bytes_limit: Integer?
 
+    UNLIMITED_PENDING: Integer
+
+    def self.check_pending_limits!: (untyped, untyped) -> void
+
+    def pending_limits: () -> [Integer, Integer]
+
+    def set_pending_limits: (Integer, Integer) -> nil
+
     attr_accessor nc: NATS::Client?
     attr_accessor jsi: NATS::JetStream::JS::Sub
     attr_accessor closed: bool?
@@ -59,6 +67,10 @@ module NATS
     @max_pending_msgs: Integer
     @max_pending_bytes: Integer
     @closed_cb: Proc?
+
+    def pending_queue_max: () -> Integer
+
+    def pending_limits_reached?: () -> bool
 
     def dropped!: () -> Integer
 

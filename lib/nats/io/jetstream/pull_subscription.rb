@@ -241,7 +241,7 @@ module NATS
       # subscription holds as many as it may, and the server delivers it again.
       def keep(msg)
         synchronize do
-          return if @pending_queue.size >= pending_msgs_limit || @pending_size >= pending_bytes_limit
+          return if pending_limits_reached?
 
           @pending_queue << msg
           @pending_size += msg.data.size
