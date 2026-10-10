@@ -1673,6 +1673,12 @@ module NATS
       sub.send(:closed!) if removed
     end
 
+    # Whether sub is a subscription of the connection, for
+    # Subscription#valid?.
+    def subscribed?(sub)
+      synchronize { !closed? && @subs[sub.sid].equal?(sub) }
+    end
+
     # Drains a subscription for Subscription#drain: unsubscribes, and once
     # the server confirms it and the messages received until then were
     # processed, removes the subscription.
