@@ -2,6 +2,12 @@ module NATS
   class Subscription
     include MonitorMixin
 
+    class Barrier
+      def initialize: (Integer, NATS::Client, Proc) -> void
+
+      def pass: () -> void
+    end
+
     attr_accessor subject: String
     attr_accessor queue: untyped
     attr_accessor future: MonitorMixin::ConditionVariable?
@@ -28,6 +34,18 @@ module NATS
 
     def unsubscribe: (?Integer?) -> void
 
+    def drain: () -> nil
+
+    def draining?: () -> bool
+
+    def dropped: () -> Integer
+
+    def max_pending: () -> [Integer, Integer]
+
+    def clear_max_pending: () -> nil
+
+    def on_close: () { (String) -> void } -> void
+
     def next_msg: (Hash[Symbol, untyped]?) -> NATS::Msg
 
     private
@@ -35,12 +53,23 @@ module NATS
     @enqueued: Integer
     @dequeued: Integer
     @processing: Hash[Integer, bool]
-    @barriers: Array[[Integer, untyped]]
+    @barriers: Array[[Integer, NATS::Subscription::Barrier]]
 
-    def add_barrier: (untyped) -> void
+    @dropped: Integer
+    @max_pending_msgs: Integer
+    @max_pending_bytes: Integer
+    @closed_cb: Proc?
+
+    def dropped!: () -> Integer
+
+    def idle?: () -> bool
+
+    def closed!: (?wait: bool) -> void
+
+    def add_barrier: (NATS::Subscription::Barrier) -> void
 
     def processed: (Integer) -> void
 
-    def passed_barriers: () -> Array[untyped]
+    def passed_barriers: () -> Array[NATS::Subscription::Barrier]
   end
 end

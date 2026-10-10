@@ -138,26 +138,6 @@ module NATS
     }.freeze
     private_constant :SERVER_ERRORS
 
-    # A barrier of nc.barrier, which runs its block once every subscription
-    # it was added to passed it.
-    class Barrier
-      def initialize(subs, nc, block)
-        @left = subs
-        @nc = nc
-        @block = block
-        @mutex = Mutex.new
-      end
-
-      def pass
-        return unless @mutex.synchronize { (@left -= 1).zero? }
-
-        @block.call
-      rescue => e
-        @nc.send(:err_cb_call, @nc, e, nil)
-      end
-    end
-    private_constant :Barrier
-
     INSTANCES = ObjectSpace::WeakMap.new # tracks all alive client instances
     private_constant :INSTANCES
 
@@ -931,7 +911,7 @@ module NATS
       end
       return block.call if subs.empty?
 
-      barrier = Barrier.new(subs.size, self, block)
+      barrier = Subscription::Barrier.new(subs.size, self, block)
       subs.each { |sub| sub.send(:add_barrier, barrier) }
       nil
     end
@@ -1446,6 +1426,7 @@ module NATS
 
       # Throw away in case we no longer manage the subscription
       sub = nil
+      last = false
       synchronize { sub = @subs[sid] }
       return unless sub
 
@@ -1463,6 +1444,7 @@ module NATS
           when sub.received == sub.max
             # Cleanup here if we have hit the max..
             synchronize { @subs.delete(sid) }
+            last = true
           end
         end
 
@@ -1481,6 +1463,7 @@ module NATS
           if (sub.pending_queue.size >= sub.pending_msgs_limit) \
             || (sub.pending_size >= sub.pending_bytes_limit)
             err = NATS::IO::SlowConsumer.new("nats: slow consumer, messages dropped")
+            sub.send(:dropped!)
           else
             hdr = process_hdr(header)
 
@@ -1491,6 +1474,9 @@ module NATS
             sub.dispatch(msg)
           end
         end
+
+        # Once it is processed, as it was the last one.
+        sub.send(:closed!) if last
       end
 
       if err
@@ -1613,7 +1599,7 @@ module NATS
 
       synchronize { sub = @subs[sid] }
       return unless sub
-      synchronize do
+      removed = synchronize do
         sub.max = opt_max
         @subs.delete(sid) unless sub.max && (sub.received < sub.max)
       end
@@ -1621,6 +1607,46 @@ module NATS
       sub.synchronize do
         sub.closed = true
       end
+      sub.send(:closed!) if removed
+    end
+
+    # Drains a subscription for Subscription#drain: unsubscribes, and once
+    # the server confirms it and the messages received until then were
+    # processed, removes the subscription.
+    def drain_subscription(sub)
+      raise NATS::IO::ConnectionClosedError.new("nats: connection closed") if closed?
+      raise NATS::IO::ConnectionDrainingError.new("nats: connection draining") if draining?
+      raise NATS::IO::BadSubscription.new("nats: invalid subscription") if sub.synchronize { sub.closed }
+      return if sub.draining?
+
+      drain_sub(sub)
+      Thread.new { finish_sub_drain(sub) }
+      nil
+    end
+
+    def finish_sub_drain(sub)
+      timeout = @options[:drain_timeout]
+      deadline = MonotonicTime.now + timeout
+
+      # Like nats.go, the PONG tells that the server processed the UNSUB,
+      # so that no more messages come.
+      begin
+        flush(timeout)
+      rescue NATS::IO::Error
+        # Waits for the messages anyway, until the deadline.
+      end
+
+      sleep 0.05 until closed? || sub.send(:idle?) || MonotonicTime.now > deadline
+      return if closed?
+
+      unless sub.send(:idle?)
+        err_cb_call(self, NATS::IO::DrainTimeoutError.new("nats: draining subscription timed out"), sub)
+      end
+      synchronize { @subs.delete(sub.sid) }
+      sub.synchronize { sub.closed = true }
+      sub.send(:closed!)
+    rescue => e
+      err_cb_call(self, e, sub)
     end
 
     def drain_sub(sub)
@@ -1671,6 +1697,7 @@ module NATS
 
         to_delete.each do |sub|
           @subs.delete(sub.sid)
+          sub.synchronize { sub.closed = true }
         end
         to_delete.clear
 
@@ -1687,6 +1714,7 @@ module NATS
 
       subscription_executor.shutdown
       subscription_executor.wait_for_termination(@options[:drain_timeout])
+      subs.each { |sub| sub.send(:closed!, wait: false) unless @subs.key?(sub.sid) }
 
       if MonotonicTime.now > drain_timeout
         e = NATS::IO::DrainTimeoutError.new("nats: draining connection timed out")
@@ -2115,6 +2143,7 @@ module NATS
       @subscription_executor&.wait_for_termination(options[:close_timeout])
 
       # TODO: Delete any other state which we are not using here too.
+      closed_subs = nil
       synchronize do
         @pongs.synchronize do
           @pongs.each do |pong|
@@ -2140,6 +2169,7 @@ module NATS
         end
 
         # Destroy any remaining subscriptions.
+        closed_subs = @subs.values
         @subs.clear
 
         if do_cbs
@@ -2156,6 +2186,8 @@ module NATS
           @io = nil
         end
       end
+
+      closed_subs&.each { |sub| sub.send(:closed!, wait: false) } if do_cbs
     end
 
     # Asks the read loop, flusher and ping threads to stop, wakes them from
