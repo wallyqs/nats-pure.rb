@@ -62,27 +62,59 @@ The commits that follow the audit on this branch close the gaps listed in
 this report, one commit per feature or fix. The rest of this report
 describes nats-pure.rb as it was audited, at `1b4cf34`.
 
+[`status.tsv`](status.tsv) gives the status of every oracle symbol after
+those commits. Each symbol that was missing or partial at the audit was
+checked again against the code and specs. Its `current_status` column holds
+the result, and its `commit` column names the commit that closed it.
+
+| Area | Symbols | Present | Deliberate | n/a | Partial | Missing |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Core NATS | 282 | 242 | 6 | 34 | 0 | 0 |
+| JetStream operations | 250 | 212 | 0 | 38 | 0 | 0 |
+| JetStream data types | 415 | 409 | 6 | 0 | 0 | 0 |
+| Key-Value and Object Store | 239 | 225 | 0 | 14 | 0 | 0 |
+| Services | 121 | 111 | 0 | 10 | 0 | 0 |
+| Batch publishing (orbit.go) | 103 | 90 | 6 | 7 | 0 | 0 |
+| **Total** | **1410** | **1289** | **18** | **103** | **0** | **0** |
+
+"Deliberate" marks a symbol whose feature exists but keeps a documented
+difference from the oracle, for compatibility or because the server
+disagrees with it:
+
+- `write_buffer_size` and `flusher_timeout` are off by default, and
+  `reconnect_on_flusher_error` is on by default, as the client behaved before.
+- Times that the client already returned as RFC 3339 Strings stay Strings,
+  with `*_time` readers that return a `Time`.
+- `js.create_consumer` and `js.update_consumer` still return `ConsumerInfo`,
+  because `nc.jsm` is the same object. The context returns handles from
+  `create_or_update_consumer` and the `*_push_consumer` methods.
+- The fast-batch error codes follow nats-server (10205 to 10208), not the
+  pinned orbit.go (10203 to 10206). orbit.go's
+  `JSErrCodeBatchPublishInvalidGapMode` (10202) is not mapped, because
+  nats-server v2.15.0 sends 10202 for `JSClusterServerMemberChangeInflightErr`
+  ("cluster member change is in progress"). A 10202 reply raises a plain
+  `BadRequest`. NQ Ruby maps 10202 to the batch error, so the two clients
+  disagree on that code.
+
+"n/a" marks Go-only idioms that have no Ruby counterpart: functional-option
+types, `context.Context` variants, channels and the `Err()` methods of
+listers.
+
+The features and fixes by area:
+
 | Area | Closed by |
 | --- | --- |
-| Core connection | `no_echo`; `connect_timeout` bounds the TCP dial and TLS handshake; reconnect jitter and `custom_reconnect_delay`; `reconnect_buf_size`; TLS `cert_file`/`key_file`/`ca_file` and `tls_handshake_first`; `token_handler`, `user_info_handler` and in-memory credentials; `on_connect`, `on_discovered_servers`, `on_lame_duck_mode` and `on_reconnect_error`; `custom_dialer`; `skip_host_lookup`; `write_buffer_size` and `flusher_timeout`; `ignore_auth_error_abort` and the abort on the same auth error twice; background `retry_on_failed_connect`; `no_callbacks_after_client_close`; specific server and client error classes |
-| Core API | `rtt`; `set_server_pool`; connection and server-INFO introspection; `barrier`; `NATS.new_inbox`; `Msg#==` and `Msg#size`; `Subscription#drain`, `draining?`, `dropped`, `max_pending`, `valid?`, `pending`, `queued_msgs` and pending limits after subscribe; message and subscription errors |
+| Core connection | `no_echo`; `connect_timeout` bounds the TCP dial and TLS handshake; reconnect jitter and `custom_reconnect_delay`; `reconnect_buf_size`; TLS `cert_file`/`key_file`/`ca_file` and `tls_handshake_first`; `token_handler`, `user_info_handler` and in-memory credentials; `on_connect`, `on_discovered_servers`, `on_lame_duck_mode` and `on_reconnect_error`; `custom_dialer`; `skip_host_lookup`; `write_buffer_size` and `flusher_timeout`; `ignore_auth_error_abort` and the abort on the same auth error twice; background `retry_on_failed_connect`; `no_callbacks_after_client_close`; `reconnect_to_server`; `permission_err_on_subscribe`; `reconnect_on_flusher_error`; connection-wide subscription pending limits; subject validation and `skip_subject_validation`; TLS `cert_cb`/`ca_cb`, `tls_connection_state` and `TLSError`; mixed websocket schemes refused; specific server, client and auth-option error classes |
+| Core API | `rtt`; `set_server_pool`; connection and server-INFO introspection; `barrier`; `NATS.new_inbox` and `new_resp_inbox`; `connected_domain`, `system_account?` and `client_id`/`client_ip` errors; `Msg#==` and `Msg#size`; `Subscription#drain`, `draining?`, `dropped`, `max_pending`, `valid?`, `pending`, `queued_msgs` and pending limits after subscribe; message and subscription errors |
 | WebSocket | permessage-deflate compression; `ws_headers` and `ws_headers_handler`; `proxy_path` |
-| JetStream management | `purge_stream`; `delete_msg` and `secure_delete_msg`; stream and consumer listing; `create_or_update_stream`; `stream_info` subjects filter and deleted details; `Stream`, `Consumer` and `PushConsumer` handles; checks that the server applied settings; typed `account_info`; source and mirror `domain`; `client_trace`; typed API and client errors |
-| JetStream publishing | publish retry; `publish_async` with ack futures and `cleanup_publisher`; atomic batch and fast-ingest publishing (orbit.go `jetstreamext`); batched direct gets |
-| JetStream consuming | fetch by bytes and with heartbeats; `consume` and `messages`, with `stop_after` and `bytes_limit`; ordered consumers; push subscription heartbeats, flow control and sequence-mismatch reports |
-| JetStream data | sub-second consumer durations; `Time` start times and parsed time readers; `RawStreamMsg#time` and Integer direct-get sequences |
-| Key-Value | placement; update, create-or-update and list buckets; mirror and source buckets; per-key TTLs and limit markers; `purge_deletes`; `updates_only` and `resume_from_revision`; bucket validation and the remaining errors; entries with `created` and the put operation; `list_keys` and filtered keys; bucket status fields; `purge(last:)`; revision-mismatch errors; writes through a non-default API prefix |
+| JetStream management | `purge_stream`; `delete_msg` and `secure_delete_msg`; stream and consumer listing; `create_or_update_stream`; `stream_info` subjects filter and deleted details; `Stream`, `Consumer` and `PushConsumer` handles; checks that the server applied settings; typed `account_info`; source and mirror `domain`; `client_trace`; typed API and client errors, `ErrorCode` and `DEFAULT_API_PREFIX`; empty-response checks; subject checks; `template_owner`; context-level consumer handles |
+| JetStream publishing | publish retry; `publish_msg` and `publish_msg_async`; `msg_id` and `expected_last_*` options; `publish_async` with ack futures, `publish_async_ack_handler` and `cleanup_publisher`; atomic batch and fast-ingest publishing (orbit.go `jetstreamext`); batched direct gets |
+| JetStream consuming | fetch by bytes and with heartbeats; `consume` and `messages`, with `stop_after` and `bytes_limit`; ordered consumers; `PushConsumer#consume`; `HandlerRequired`; `err_on_missing_heartbeat`; two-argument consume error handlers; `MessageBatch#error`; push subscription heartbeats, flow control and sequence-mismatch reports |
+| JetStream data | sub-second consumer durations; `Time` start times and parsed time readers; `RawStreamMsg#time` and Integer direct-get sequences; `start_time` of fetched configs; exact `pause_remaining`; `MigrationStatus` |
+| Key-Value | placement; update, create-or-update and list buckets; mirror and source buckets; per-key TTLs and limit markers; `purge_deletes`; `updates_only` and `resume_from_revision`; bucket validation and the remaining errors; entries with `created` and the put operation; `list_keys` and filtered keys; bucket status fields; `purge(last:)`; revision-mismatch errors; writes through a non-default API prefix; keys validated always; `delta` 0 on `get` |
 | Object Store | the whole API, checked against nats.go in both directions |
 | Services | error handler and `NATSError`, stop on close; `respond_json`; response headers; `control_subject` and the error header constants; a default endpoint; `queue_group_disabled`; endpoint pending limits; `ArgRequiredError` and `RespondError`; `:type`, `ping`, `reset` of the start time and name/version validation |
 | Fixes | `next_msg` on a callback subscription; `connected?` and `draining?` while and after draining; repeated header keys; `respond` and `respond_msg`; pending async publishes on a lost connection; one `ConsumerDeleted` error |
-
-What remains differs from nats.go on purpose, to keep existing behaviour,
-and each difference is noted in the CHANGELOG: `write_buffer_size` and
-`flusher_timeout` are off by default; resolved addresses are tried in
-resolver order, not shuffled; consumer `backoff` and `max_expires` stay in
-nanoseconds; fetch heartbeats are opt-in. Go-only idioms (functional option
-types, `context.Context` variants, channels) have no Ruby counterpart and are
-not ported.
 
 ## Missing features that the NQ Ruby client implements
 
