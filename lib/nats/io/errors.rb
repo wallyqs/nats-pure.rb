@@ -122,6 +122,10 @@ module NATS
     # ErrWebSocketHeadersAlreadySet of nats.go.
     class WebSocketHeadersAlreadySet < ArgumentError; end
 
+    # When user_signature_cb is given without user_jwt_cb or user_nkey_cb,
+    # or credentials, to sign for, like ErrNoUserCB of nats.go.
+    class NoUserCB < ArgumentError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 
@@ -157,6 +161,10 @@ module NATS
 
     # When the no_echo option is used but the server does not support it.
     class NoEchoNotSupported < ConnectError; end
+
+    # When an nkey is set, but the server sends no nonce to sign, as it does
+    # not take nkeys, like ErrNkeysNotSupported of nats.go.
+    class NkeysNotSupported < ConnectError; end
 
     # When we cannot connect serverince there are no servers available.
     class NoServersError < ConnectError; end

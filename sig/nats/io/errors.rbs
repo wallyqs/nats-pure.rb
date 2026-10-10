@@ -72,6 +72,9 @@ module NATS
     class WebSocketHeadersAlreadySet < ArgumentError
     end
 
+    class NoUserCB < ArgumentError
+    end
+
     class MaxPayload < NATS::IO::ClientError
     end
 
@@ -115,6 +118,9 @@ module NATS
     end
 
     class NoEchoNotSupported < NATS::IO::ConnectError
+    end
+
+    class NkeysNotSupported < NATS::IO::ConnectError
     end
 
     class NoServersError < NATS::IO::ConnectError

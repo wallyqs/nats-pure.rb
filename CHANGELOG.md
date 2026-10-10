@@ -4,6 +4,7 @@
 
 ### Added
 
+- Like nats.go, `user_signature_cb` without `user_jwt_cb`, `user_nkey_cb` or credentials raises `NATS::IO::NoUserCB` (`ErrNoUserCB`, an `ArgumentError`) instead of being ignored, and connecting with an nkey to a server that sends no nonce, as it does not take nkeys, raises `NATS::IO::NkeysNotSupported` (`ErrNkeysNotSupported`, a `ConnectError`) without retrying that server.
 - Options of `connect` that conflict raise named errors, like nats.go: `NATS::IO::TokenAlreadySet`, `UserInfoAlreadySet`, `NkeyAndUser`, `UserButNoSigCB`, `NkeyButNoSigCB` and `WebSocketHeadersAlreadySet` (`ErrTokenAlreadySet`, `ErrUserInfoAlreadySet`, `ErrNkeyAndUser`, `ErrUserButNoSigCB`, `ErrNkeyButNoSigCB` and `ErrWebSocketHeadersAlreadySet`), subclasses of the `ArgumentError` raised before.
 - `nc.new_resp_inbox` returns a reply subject under the prefix of the subscription that `request` uses for all responses (the prefix, a `new_inbox`, a dot and a token), like `NewRespInbox` of nats.go; like nats.go it does not subscribe, the first request does. Responses that no request waits for, as late ones, are now dropped instead of being kept for good.
 - `nc.connected_domain` returns the JetStream domain of the connected server and `nc.system_account?` whether the account of the connection is the system account, like `ConnectedDomain` and `IsSystemAccount` of nats.go; `nil` and `false` unless connected.

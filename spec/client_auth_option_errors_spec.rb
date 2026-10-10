@@ -36,6 +36,18 @@ describe "Client - auth option errors" do
     end.to raise_error(NATS::IO::NkeyAndUser)
   end
 
+  it "raises NoUserCB for a signature handler with nothing to sign for, like nats.go" do
+    expect do
+      NATS.connect(url, reconnect: false, user_signature_cb: sig_cb)
+    end.to raise_error(NATS::IO::NoUserCB, "nats: user callback not defined")
+    expect(NATS::IO::NoUserCB.ancestors).to include(ArgumentError)
+
+    # Credentials sign for themselves; the client takes them without connecting.
+    expect do
+      NATS::IO::Client.new(url, user_signature_cb: sig_cb, user_credentials: "./spec/configs/nkeys/foo-user.creds")
+    end.not_to raise_error
+  end
+
   it "keeps them ArgumentErrors, as they were" do
     [
       NATS::IO::TokenAlreadySet, NATS::IO::UserInfoAlreadySet, NATS::IO::NkeyAndUser,
