@@ -107,9 +107,10 @@ module NATS
         end
 
         # parse_time parses a time from the server, which sends Go's zero
-        # time for a time that is not set.
+        # time for a time that is not set. A Time is taken as it is.
         def parse_time(time)
           return if time.nil?
+          return time if time.is_a?(::Time)
 
           time = ::Time.parse(time)
           time unless time.year == 1

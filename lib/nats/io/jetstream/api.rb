@@ -195,7 +195,8 @@ module NATS
       #   @return [String]
       # @!attribute opt_start_time
       #   Time to start at, with the "by_start_time" deliver policy, as a
-      #   Time or as an RFC 3339 String; a fetched config has a String.
+      #   Time or as an RFC 3339 String; a fetched config has a String,
+      #   which start_time parses.
       #   @return [Time, String, nil]
       # @!attribute ack_policy
       #   @return [String]
@@ -270,6 +271,12 @@ module NATS
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
+        end
+
+        # @return [Time, nil] opt_start_time as a Time, also when it is an
+        #   RFC 3339 String, like OptStartTime of nats.go.
+        def start_time
+          JS.parse_time(opt_start_time)
         end
       end
 
@@ -528,12 +535,13 @@ module NATS
       # @!attribute mirror
       #   The stream that the stream mirrors, as `{name:, opt_start_seq:,
       #   opt_start_time:, filter_subject:, ...}`, where opt_start_time can
-      #   be a Time.
-      #   @return [Hash]
+      #   be a Time. That of a fetched config is a StreamSource, whose
+      #   opt_start_time stays a String, which start_time parses.
+      #   @return [Hash, StreamSource]
       # @!attribute sources
       #   The streams that the stream takes messages from, as Hashes like
-      #   that of mirror.
-      #   @return [Array<Hash>]
+      #   that of mirror, StreamSources in a fetched config.
+      #   @return [Array<Hash>, Array<StreamSource>]
       # @!attribute storage
       #   @return [String]
       # @!attribute num_replicas
@@ -662,6 +670,30 @@ module NATS
           opts.delete_if { |k| rem.include?(k) }
           super
         end
+
+        # @!visibility private
+        # decode takes the config of a stream as the server sends it.
+        def self.decode(config)
+          config[:mirror] = StreamSource.decode(config[:mirror]) if config[:mirror]
+          config[:sources] = config[:sources].map { |source| StreamSource.decode(source) } if config[:sources].is_a?(Array)
+          new(config)
+        end
+      end
+
+      # StreamSource is the mirror or a source of the config of a stream
+      # as the server sends it: a Hash with Symbol keys, such as :name,
+      # :opt_start_seq, :opt_start_time and :filter_subject.
+      class StreamSource < Hash
+        # @!visibility private
+        def self.decode(source)
+          source.is_a?(Hash) ? self[source] : source
+        end
+
+        # @return [Time, nil] The opt_start_time String as a Time, like
+        #   OptStartTime of nats.go StreamSource.
+        def start_time
+          JS.parse_time(self[:opt_start_time])
+        end
       end
 
       # StreamInfo is the info about a stream from JetStream.
@@ -699,7 +731,7 @@ module NATS
         :mirror, :sources, :cluster, :ts,
         keyword_init: true) do
         def initialize(opts = {})
-          opts[:config] = StreamConfig.new(opts[:config])
+          opts[:config] = StreamConfig.decode(opts[:config])
           opts[:state] = StreamState.new(opts[:state])
           opts[:created] = ::Time.parse(opts[:created])
           opts[:ts] = ::Time.parse(opts[:ts]) if opts[:ts]
@@ -807,7 +839,7 @@ module NATS
         def initialize(opts = {})
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          opts[:config] = StreamConfig.new(opts[:config])
+          opts[:config] = StreamConfig.decode(opts[:config])
           opts[:state] = StreamState.new(opts[:state])
           super
           freeze
