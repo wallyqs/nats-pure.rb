@@ -66,6 +66,19 @@ describes nats-pure.rb as it was audited, at `1b4cf34`.
 those commits. Each symbol that was missing or partial at the audit was
 checked again against the code and specs. Its `current_status` column holds
 the result, and its `commit` column names the commit that closed it.
+[`commits.md`](commits.md) lists, for each commit, the oracle symbols that
+it closed.
+
+`ruby docs/nq-gap/verify_status.rb` checks `status.tsv` against the
+repository. It checks that:
+
+- every oracle symbol has one known status, and none is missing or partial;
+- every symbol closed since the audit names a commit that is on the branch;
+- that commit changes the file the row points to;
+- every cited file and line exists;
+- every deliberate difference says where it is documented.
+
+With `--map`, it also writes `commits.md`.
 
 | Area | Symbols | Present | Deliberate | n/a | Partial | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
