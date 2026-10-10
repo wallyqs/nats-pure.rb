@@ -78,6 +78,8 @@ module NATS
 
       def messages_context: () -> (NATS::JetStream::MessagesContext | NATS::JetStream::OrderedMessagesContext)
 
+      def self.takes_context?: (untyped) -> bool
+
       private
 
       def run: () -> void
