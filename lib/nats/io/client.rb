@@ -1366,11 +1366,11 @@ module NATS
 
       if opts[:token_handler]
         url_token = server_pool.any? { |srv| srv[:uri].user && !srv[:uri].password }
-        raise ArgumentError, "nats: token and token handler both set" if opts[:auth_token] || url_token
+        raise NATS::IO::TokenAlreadySet, "nats: token and token handler both set" if opts[:auth_token] || url_token
       end
 
       if opts[:user_info_handler] && (opts[:user] || opts[:pass])
-        raise ArgumentError, "nats: cannot set user info handler and user/pass"
+        raise NATS::IO::UserInfoAlreadySet, "nats: cannot set user info handler and user/pass"
       end
 
       if opts[:user_jwt].nil? != opts[:user_seed].nil?
@@ -1382,11 +1382,11 @@ module NATS
 
       nkeys = %i[nkeys_seed user_nkey_cb].select { |opt| opts[opt] }
       raise ArgumentError, "nats: only one of #{nkeys.join(", ")} may be set" if nkeys.size > 1
-      raise ArgumentError, "nats: user callback and nkey defined" if users.any? && nkeys.any?
+      raise NATS::IO::NkeyAndUser, "nats: user callback and nkey defined" if users.any? && nkeys.any?
 
       if !opts[:user_signature_cb]
-        raise ArgumentError, "nats: user callback defined without a signature handler" if opts[:user_jwt_cb]
-        raise ArgumentError, "nats: nkey defined without a signature handler" if opts[:user_nkey_cb]
+        raise NATS::IO::UserButNoSigCB, "nats: user callback defined without a signature handler" if opts[:user_jwt_cb]
+        raise NATS::IO::NkeyButNoSigCB, "nats: nkey defined without a signature handler" if opts[:user_nkey_cb]
       end
     end
 
@@ -1444,7 +1444,7 @@ module NATS
         raise ArgumentError, "nats: proxy_path must be a String"
       end
       if @options[:ws_headers_handler] && @options[:ws_headers]&.any?
-        raise ArgumentError, "nats: websocket connection headers already set"
+        raise NATS::IO::WebSocketHeadersAlreadySet, "nats: websocket connection headers already set"
       end
 
       NATS.send(:check_inbox_prefix!, @inbox_prefix)

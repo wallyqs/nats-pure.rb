@@ -95,6 +95,33 @@ module NATS
     # ErrClientCertOrRootCAsRequired of nats.go.
     class ClientCertOrRootCAsRequired < ArgumentError; end
 
+    # Options of connect that cannot be used together raise these, which are
+    # ArgumentErrors, as they were, named like the errors of nats.go.
+
+    # When token_handler is given with an auth_token, or a token in the
+    # URL, like ErrTokenAlreadySet of nats.go.
+    class TokenAlreadySet < ArgumentError; end
+
+    # When user_info_handler is given with user or pass, like
+    # ErrUserInfoAlreadySet of nats.go.
+    class UserInfoAlreadySet < ArgumentError; end
+
+    # When both a user JWT, as from credentials, and an nkey are given,
+    # like ErrNkeyAndUser of nats.go.
+    class NkeyAndUser < ArgumentError; end
+
+    # When user_jwt_cb is given without user_signature_cb, like
+    # ErrUserButNoSigCB of nats.go.
+    class UserButNoSigCB < ArgumentError; end
+
+    # When user_nkey_cb is given without user_signature_cb, like
+    # ErrNkeyButNoSigCB of nats.go.
+    class NkeyButNoSigCB < ArgumentError; end
+
+    # When both ws_headers and ws_headers_handler are given, like
+    # ErrWebSocketHeadersAlreadySet of nats.go.
+    class WebSocketHeadersAlreadySet < ArgumentError; end
+
     # When we cannot connect to the server (either initially or after a reconnect).
     class ConnectError < Error; end
 

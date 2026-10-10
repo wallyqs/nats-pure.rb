@@ -4,6 +4,7 @@
 
 ### Added
 
+- Options of `connect` that conflict raise named errors, like nats.go: `NATS::IO::TokenAlreadySet`, `UserInfoAlreadySet`, `NkeyAndUser`, `UserButNoSigCB`, `NkeyButNoSigCB` and `WebSocketHeadersAlreadySet` (`ErrTokenAlreadySet`, `ErrUserInfoAlreadySet`, `ErrNkeyAndUser`, `ErrUserButNoSigCB`, `ErrNkeyButNoSigCB` and `ErrWebSocketHeadersAlreadySet`), subclasses of the `ArgumentError` raised before.
 - `nc.new_resp_inbox` returns a reply subject under the prefix of the subscription that `request` uses for all responses (the prefix, a `new_inbox`, a dot and a token), like `NewRespInbox` of nats.go; like nats.go it does not subscribe, the first request does. Responses that no request waits for, as late ones, are now dropped instead of being kept for good.
 - `nc.connected_domain` returns the JetStream domain of the connected server and `nc.system_account?` whether the account of the connection is the system account, like `ConnectedDomain` and `IsSystemAccount` of nats.go; `nil` and `false` unless connected.
 - `tls: {cert_cb: -> { [cert, key] }, ca_cb: -> { store }}` load the client certificate and its key (objects or PEM, with an optional chain) and the `OpenSSL::X509::Store` of the CAs to trust from callbacks, called on each (re)connect, like `ClientTLSConfig`, `TLSCertCB` and `RootCAsCB` of nats.go; like nats.go they are called once when connecting to check them, and naming them without setting either raises `NATS::IO::ClientCertOrRootCAsRequired` (`ErrClientCertOrRootCAsRequired`), an `ArgumentError`.
