@@ -16,7 +16,11 @@ module NATS
 
     def publish: (String, ?String, **untyped) -> NATS::JetStream::PubAck
 
+    def publish_msg: (NATS::Msg, **untyped) -> NATS::JetStream::PubAck
+
     def publish_async: (String, ?String, **untyped) -> NATS::JetStream::PubAckFuture
+
+    def publish_msg_async: (NATS::Msg, **untyped) -> NATS::JetStream::PubAckFuture
 
     def publish_async_pending: () -> Integer
 
@@ -38,7 +42,13 @@ module NATS
 
     private
 
-    def publish_header: (Hash[Symbol, untyped]) -> Hash[String, untyped]?
+    def sync_publish: (String, String?, Hash[String, untyped]?, Hash[Symbol, untyped]) -> NATS::JetStream::PubAck
+
+    def async_publish: (String, String?, Hash[String, untyped]?, Hash[Symbol, untyped]) -> NATS::JetStream::PubAckFuture
+
+    def check_publish_msg: (untyped, Hash[Symbol, untyped]) -> void
+
+    def publish_header: (Hash[Symbol, untyped], ?Hash[String, untyped]?) -> Hash[String, untyped]?
 
     def init_client_trace: () -> void
 

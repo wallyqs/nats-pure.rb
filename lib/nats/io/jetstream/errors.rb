@@ -75,6 +75,10 @@ module NATS
       # ErrJetStreamPublisherClosed of nats.go.
       class PublisherClosed < Error; end
 
+      # When a message given to publish_msg_async has a reply, which it
+      # needs for the ack, like ErrAsyncPublishReplySubjectSet of nats.go.
+      class AsyncPublishReplySubjectSet < Error; end
+
       # When a pull that asked for idle heartbeats heard nothing for two of
       # them, as when the server is gone or the consumer was deleted.
       class NoHeartbeat < Error; end
