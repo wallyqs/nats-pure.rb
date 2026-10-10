@@ -1,0 +1,27 @@
+module NATS
+  class ObjectStore
+    module Manager
+      def object_store: (String) -> NATS::ObjectStore
+
+      def create_object_store: (API::ObjectStoreConfig | Hash[Symbol, untyped] | String) -> NATS::ObjectStore
+
+      def update_object_store: (API::ObjectStoreConfig | Hash[Symbol, untyped]) -> NATS::ObjectStore
+
+      def create_or_update_object_store: (API::ObjectStoreConfig | Hash[Symbol, untyped]) -> NATS::ObjectStore
+
+      def delete_object_store: (String) -> bool
+
+      def object_store_names: () -> Array[String]
+
+      def object_stores: () -> Array[NATS::ObjectStore::BucketStatus]
+
+      private
+
+      def validate_object_store_name: (untyped) -> void
+
+      def object_store_stream_config: (API::ObjectStoreConfig | Hash[Symbol, untyped] | String | nil) -> NATS::JetStream::API::StreamConfig
+
+      def object_store_for: (NATS::JetStream::API::StreamConfig) -> NATS::ObjectStore
+    end
+  end
+end

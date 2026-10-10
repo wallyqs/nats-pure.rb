@@ -1,0 +1,34 @@
+module NATS
+  class ObjectStore
+    module API
+      def self.normalize_headers: (Hash[untyped, untyped]?) -> Hash[String, Array[String]]?
+
+      class ObjectStoreConfig < Struct[untyped]
+      end
+
+      class ObjectLink < Struct[String?]
+        def to_json_hash: () -> Hash[Symbol, String]
+      end
+
+      class ObjectMetaOptions < Struct[untyped]
+        def to_json_hash: () -> Hash[Symbol, untyped]
+      end
+
+      class ObjectMeta < Struct[untyped]
+      end
+
+      class ObjectInfo < Struct[untyped]
+        def self.from_json: (String) -> ObjectInfo
+
+        def link?: () -> bool
+
+        def deleted?: () -> bool
+
+        def to_json: (*untyped) -> String
+      end
+
+      class ObjectResult < Struct[untyped]
+      end
+    end
+  end
+end
