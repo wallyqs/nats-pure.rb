@@ -599,7 +599,7 @@ module NATS
         # Create the a future for the request that will
         # get signaled when it receives the request.
         future = @resp_sub.new_cond
-        @resp_map[token][:future] = future
+        @resp_map[token] = {future: future}
       end
 
       # Publish request and wait for reply.
@@ -650,7 +650,7 @@ module NATS
         # Create the a future for the request that will
         # get signaled when it receives the request.
         future = @resp_sub.new_cond
-        @resp_map[token][:future] = future
+        @resp_map[token] = {future: future}
       end
       msg.reply = inbox
       msg.data ||= ""
@@ -1757,7 +1757,7 @@ module NATS
     # for the new style request response.
     def start_resp_mux_sub!
       @resp_sub_prefix = new_inbox
-      @resp_map = Hash.new { |h, k| h[k] = {} }
+      @resp_map = {}
 
       @resp_sub = Subscription.new
       @resp_sub.subject = "#{@resp_sub_prefix}.*"
@@ -1774,8 +1774,13 @@ module NATS
         token = msg.subject.split(".").last
         future = nil
         synchronize do
-          future = @resp_map[token][:future]
-          @resp_map[token][:response] = msg
+          # Ignore responses for requests that already gave up,
+          # e.g. replies that arrive after the request timed out.
+          entry = @resp_map[token]
+          if entry
+            future = entry[:future]
+            entry[:response] = msg
+          end
         end
 
         # Signal back that the response has arrived

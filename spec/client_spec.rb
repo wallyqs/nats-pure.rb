@@ -470,6 +470,43 @@ describe "Client - Specification" do
 
       nc.close
     end
+
+    it "should not keep responses that arrive after a request timed out" do
+      nc = NATS::IO::Client.new
+      nc.connect(servers: [@s.uri], old_style_request: false)
+
+      nc.subscribe("slow") do |msg|
+        Thread.new do
+          sleep 0.1
+          msg.respond("late")
+        end
+      end
+      nc.subscribe("fast") do |msg|
+        msg.respond("ok")
+      end
+      nc.flush
+
+      total = 10
+      total.times do
+        expect do
+          nc.request("slow", "please", timeout: 0.01)
+        end.to raise_error(NATS::IO::Timeout)
+        expect do
+          nc.request_msg(NATS::Msg.new(subject: "slow", data: "please"), timeout: 0.01)
+        end.to raise_error(NATS::IO::Timeout)
+      end
+
+      # Wait for all the late replies to be delivered.
+      sleep 0.5
+      nc.flush
+      expect(nc.instance_variable_get(:@resp_map)).to be_empty
+
+      # Requests still work after dropping the late replies.
+      expect(nc.request("fast", "please", timeout: 1).data).to eql("ok")
+      expect(nc.instance_variable_get(:@resp_map)).to be_empty
+
+      nc.close
+    end
   end
 
   context "using old style request" do
