@@ -67,6 +67,13 @@ module NATS
     SUB_OP = ('SUB'.freeze)
     EMPTY_MSG = (''.freeze)
 
+    # Subjects cannot contain whitespace since it would break the framing
+    # of the protocol and allow injecting other commands.
+    INVALID_SUBJECT = /\s/
+
+    # Sentinel queued to a subscription to stop its delivery thread.
+    END_OF_SUB = Object.new.freeze
+
     # Connection States
     DISCONNECTED = 0
     CONNECTED    = 1
@@ -301,7 +308,8 @@ module NATS
       end
 
       def publish(subject, msg=EMPTY_MSG, opt_reply=nil, &blk)
-        raise BadSubject if !subject or subject.empty?
+        raise BadSubject if !subject or subject.empty? or subject =~ INVALID_SUBJECT
+        raise BadSubject if opt_reply and opt_reply =~ INVALID_SUBJECT
         msg_size = msg.bytesize
 
         # Accounting
@@ -315,6 +323,8 @@ module NATS
       # Create subscription which is dispatched asynchronously
       # messages to a callback.
       def subscribe(subject, opts={}, &callback)
+        raise BadSubject if !subject or subject.empty? or subject =~ INVALID_SUBJECT
+
         sid = nil
         sub = nil
         synchronize do
@@ -336,9 +346,6 @@ module NATS
         send_command("SUB #{subject} #{opts[:queue]} #{sid}#{CR_LF}")
         @flush_queue << :sub
 
-        # Setup server support for auto-unsubscribe when receiving enough messages
-        unsubscribe(sid, opts[:max]) if opts[:max]
-
         # Async subscriptions each own a single thread for the
         # delivery of messages.
         # FIXME: Support shared thread pool with configurable limits
@@ -346,6 +353,9 @@ module NATS
         sub.wait_for_msgs_t = Thread.new do
           loop do
             msg = sub.pending_queue.pop
+
+            # Subscription is done so stop delivering messages.
+            break if msg.equal?(END_OF_SUB)
 
             cb = nil
             sub.synchronize do
@@ -368,6 +378,11 @@ module NATS
             end
           end
         end
+
+        # Setup server support for auto-unsubscribe when receiving enough messages.
+        # Done after starting the delivery thread so that it is stopped as well
+        # in case the subscription is removed right away.
+        unsubscribe(sid, opts[:max]) if opts[:max]
 
         sid
       end
@@ -398,21 +413,24 @@ module NATS
           # Create the a future for the request that will
           # get signaled when it receives the request.
           future = @resp_sub.new_cond
-          @resp_map[token][:future] = future
+          @resp_map[token] = { :future => future }
         end
 
-        # Publish request and wait for reply.
-        publish(subject, payload, inbox)
-        with_nats_timeout(timeout) do
-          @resp_sub.synchronize do
-            future.wait(timeout)
+        begin
+          # Publish request and wait for reply.
+          publish(subject, payload, inbox)
+          with_nats_timeout(timeout) do
+            @resp_sub.synchronize do
+              future.wait(timeout)
+            end
           end
-        end
-
-        # Check if there is a response already
-        synchronize do
-          result = @resp_map[token]
-          response = result[:response]
+        ensure
+          # Check if there is a response already and forget about
+          # the request so that the map does not grow with every request.
+          synchronize do
+            result = @resp_map.delete(token)
+            response = result[:response] if result
+          end
         end
 
         response
@@ -484,14 +502,32 @@ module NATS
         @flush_queue << :unsub
 
         return unless sub = @subs[sid]
+        removed = false
         synchronize do
           sub.max = opt_max
-          @subs.delete(sid) unless (sub.max && (sub.received < sub.max))
+          removed = !(sub.max && (sub.received < sub.max))
+          @subs.delete(sid) if removed
+        end
 
-          # Stop messages delivery thread for async subscribers
-          if sub.wait_for_msgs_t && sub.wait_for_msgs_t.alive?
-            sub.wait_for_msgs_t.exit
+        # Stop the delivery thread for async subscribers only once the
+        # subscription is gone, otherwise it has to keep delivering until
+        # the max number of messages has been received.
+        stop_delivery_thread(sub, true) if removed
+      end
+
+      # Stops the delivery thread of an async subscription, after the
+      # messages which are still pending unless asked to drop them.
+      def stop_delivery_thread(sub, drop_pending=false)
+        return unless sub.wait_for_msgs_t and sub.pending_queue
+        sub.synchronize do
+          sub.pending_queue.clear if drop_pending
+          begin
+            sub.pending_queue.push(END_OF_SUB, true)
+          rescue ThreadError
+            # Queue is full so the subscriber is a slow consumer already,
+            # drop what is pending rather than blocking the read loop.
             sub.pending_queue.clear
+            sub.pending_queue.push(END_OF_SUB)
           end
         end
       end
@@ -607,6 +643,10 @@ module NATS
               sub.pending_queue << Msg.new(subject, reply, data)
               sub.pending_size += data.size
             end
+
+            # This was the last message for the subscription so let the
+            # delivery thread finish once it has processed it.
+            stop_delivery_thread(sub) if sub.max && sub.received == sub.max
           end
         end
 
@@ -639,16 +679,13 @@ module NATS
               # Skip in case it is the current server which we already know
               next if @uri.host == u.host && @uri.port == u.port
 
-              present = server_pool.detect do |srv|
+              present = (server_pool + srvs).detect do |srv|
                 srv[:uri].host == u.host && srv[:uri].port == u.port
               end
 
               if not present
-                # Let explicit user and pass options set the credentials.
-                u.user = options[:user] if options[:user]
-                u.password = options[:pass] if options[:pass]
-
-                # Use creds from the current server if not set explicitly.
+                # Use creds from the current server, explicit user and
+                # pass options take precedence when connecting anyway.
                 if @uri
                   u.user ||= @uri.user if @uri.user
                   u.password ||= @uri.password if @uri.password
@@ -739,8 +776,6 @@ module NATS
 
         # Set url of the server to which we would be connected
         @uri = srv[:uri]
-        @uri.user = @options[:user] if @options[:user]
-        @uri.password = @options[:pass] if @options[:pass]
 
         srv
       end
@@ -761,7 +796,19 @@ module NATS
       end
 
       def auth_connection?
-        !@uri.user.nil?
+        !(@options[:user] || @uri.user).nil?
+      end
+
+      # Credentials given explicitly as options take precedence over the
+      # ones from the URI of the server, which are percent-decoded.
+      def credentials
+        user = @options[:user] || unescape_uri_component(@uri.user)
+        pass = @options[:pass] || unescape_uri_component(@uri.password)
+        [user, pass]
+      end
+
+      def unescape_uri_component(str)
+        str && URI::DEFAULT_PARSER.unescape(str)
       end
 
       def connect_command
@@ -775,11 +822,12 @@ module NATS
         cs[:name] = @options[:name] if @options[:name]
 
         if auth_connection?
-          if @uri.password
-            cs[:user] = @uri.user
-            cs[:pass] = @uri.password
+          user, pass = credentials
+          if pass
+            cs[:user] = user
+            cs[:pass] = pass
           else
-            cs[:auth_token] = @uri.user
+            cs[:auth_token] = user
           end
         end
 
@@ -933,7 +981,7 @@ module NATS
         if !line or line.empty?
           raise ConnectError.new("nats: protocol exception, INFO not received")
         end
-        _, info_json = line.split(' ')
+        _, info_json = line.split(' ', 2)
         process_info(info_json)
 
         case
@@ -1172,7 +1220,7 @@ module NATS
       # for the new style request response.
       def start_resp_mux_sub!
         @resp_sub_prefix = "_INBOX.#{@nuid.next}"
-        @resp_map = Hash.new { |h,k| h[k] = { }}
+        @resp_map = { }
 
         @resp_sub = Subscription.new
         @resp_sub.subject = "#{@resp_sub_prefix}.*"
@@ -1185,6 +1233,7 @@ module NATS
         @resp_sub.wait_for_msgs_t = Thread.new do
           loop do
             msg = @resp_sub.pending_queue.pop
+            break if msg.equal?(END_OF_SUB)
             @resp_sub.pending_size -= msg.data.size
 
             # Pick the token and signal the request under the mutex
@@ -1192,9 +1241,15 @@ module NATS
             token = msg.subject.split('.').last
             future = nil
             synchronize do
-              future = @resp_map[token][:future]
-              @resp_map[token][:response] = msg
+              # Discard the response in case the request is not waiting
+              # for it anymore, e.g. it timed out already.
+              result = @resp_map[token]
+              if result
+                future = result[:future]
+                result[:response] = msg
+              end
             end
+            next unless future
 
             # Signal back that the response has arrived.
             @resp_sub.synchronize do

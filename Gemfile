@@ -6,4 +6,5 @@ group :test do
   gem 'rake'
   gem 'rspec'
   gem 'benchmark-ips'
+  gem 'zizek'
 end

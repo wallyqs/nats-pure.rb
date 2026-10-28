@@ -21,7 +21,7 @@ module NATS
     PING     = /\APING\s*\r\n/i
     PONG     = /\APONG\s*\r\n/i
     INFO     = /\AINFO\s+([^\r\n]+)\r\n/i
-    UNKNOWN  = /\A(.*)\r\n/
+    UNKNOWN  = /\A(.*?)\r\n/m
 
     AWAITING_CONTROL_LINE = 1
     AWAITING_MSG_PAYLOAD  = 2
